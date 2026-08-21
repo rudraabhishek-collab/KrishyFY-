@@ -7,14 +7,16 @@ datasource db {
 }
 
 model User {
-  id      String   @id
-  name    String
-  email   String  @unique
-  password String
-  role    String
-  createdAt DateTime
-  sessions Session[]
+  id           String        @id
+  name         String
+  email        String        @unique
+  password     String
+  role         String
+  createdAt    DateTime
+  sessions     Session[]
   cropListings CropListing[]
+  auctions     Auction[]
+  bids         Bid[]
 }
 
 model Session {
@@ -22,22 +24,49 @@ model Session {
   userId    String
   expires   DateTime
   createdAt DateTime
-  user      User @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model CropListing {
+  id            String    @id @default(uuid())
+  farmerId      String
+  cropName      String
+  category      String
+  description   String?
+  quantity      String
+  unit          String
+  expectedPrice Decimal?
+  location      String
+  harvestDate   DateTime?
+  status        String    @default("ACTIVE")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  farmer        User      @relation(fields: [farmerId], references: [id])
+  auctions      Auction[]
+}
+
+model Auction {
+  id               String      @id @default(uuid())
+  cropListingId    String
+  startingPrice    Decimal
+  minimumIncrement Decimal
+  status           String      @default("ACTIVE")
+  startsAt         DateTime
+  endsAt           DateTime
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  cropListing      CropListing @relation(fields: [cropListingId], references: [id])
+  bids             Bid[]
+  user             User?       @relation(fields: [userId], references: [id])
+  userId           String?
+}
+
+model Bid {
   id        String   @id @default(uuid())
-  farmerId  String
-  cropName  String
-  category  String
-  description String?
-  quantity  String
-  unit      String
-  expectedPrice  Decimal?
-  location  String
-  harvestDate DateTime?
-  status    String   @default("ACTIVE")
+  auctionId String
+  buyerId   String
+  amount    Decimal
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  farmer    User     @relation(fields: [farmerId], references: [id])
+  auction   Auction  @relation(fields: [auctionId], references: [id])
+  buyer     User     @relation(fields: [buyerId], references: [id])
 }
