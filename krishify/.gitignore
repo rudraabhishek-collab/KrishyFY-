@@ -1,0 +1,17 @@
+.env*
+.next/
+*.local
+/.next/
+/node_modules/
+/.pnpm-store/
+/dist/
+/build/
+
+# Prisma
+/prisma/migrations/
+
+# Database
+*.sqlite
+
+# Swap
+.env.local
