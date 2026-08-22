@@ -1,114 +1,72 @@
-const React = require("react")
+const React = require('react')
+
+const DELIVERY_STATUS = { CREATED: 'badge-gray', PACKED: 'badge-yellow', DISPATCHED: 'badge-blue', IN_TRANSIT: 'badge-blue', OUT_FOR_DELIVERY: 'badge-yellow', DELIVERED: 'badge-green', CANCELLED: 'badge-red' }
+const STATUS_LABELS = { CREATED: 'Created', PACKED: 'Packed', DISPATCHED: 'Dispatched', IN_TRANSIT: 'In Transit', OUT_FOR_DELIVERY: 'Out for Delivery', DELIVERED: 'Delivered', CANCELLED: 'Cancelled' }
+const STATUS_STEPS = ['CREATED', 'PACKED', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED']
 
 function FarmerDeliveryPage() {
-  const [deliveries, setDeliveries] = React.useState(null)
+  const [deliveries, setDeliveries] = React.useState([])
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState(null)
-  const [user] = React.useState(() => {
-    try {
-      const cookieVal = document.cookie.replace(/(?:(?:^|.*)\s*krishify_session\s*=\s*([^;]*).*$)|^.*$/, "$1")
-      return cookieVal ? { sessionId: cookieVal } : null
-    } catch {
-      return null
-    }
-  })
+  const [error, setError] = React.useState('')
 
   React.useEffect(() => {
-    async function loadDeliveries() {
-      try {
-        const res = await fetch("/api/delivery", {
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        })
-        const data = await res.json()
-        if (data.success) {
-          setDeliveries(data.deliveries)
-        } else {
-          setError(data.error || "Failed to load deliveries")
-        }
-      } catch (e) {
-        setError(e.message)
-      } finally {
+    // Fetch all orders for farmer, then check deliveries
+    fetch('/api/delivery', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setDeliveries(data.deliveries || [])
+        else if (data.error?.includes('Unauthenticated')) window.location.href = '/login'
+        else setError(data.error || 'Failed to load')
         setLoading(false)
-      }
-    }
-    if (user?.sessionId) {
-      loadDeliveries()
-    } else {
-      setError("Unauthenticated")
-      setLoading(false)
-    }
+      }).catch(() => { setError('Network error'); setLoading(false) })
   }, [])
 
-  const statusLabels = {
-    CREATED: "Created",
-    PACKED: "Packed",
-    DISPATCHED: "Dispatched",
-    IN_TRANSIT: "In transit",
-    OUT_FOR_DELIVERY: "Out for delivery",
-    DELIVERED: "Delivered",
-    CANCELLED: "Cancelled",
-  }
+  if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
+    React.createElement('div', { className: 'spinner', style: { margin: '0 auto 16px' } }),
+    React.createElement('p', { style: { color: '#6b7280' } }, 'Loading deliveries...')
+  )
 
-  if (loading) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("p", null, "Loading deliveries...")
+  return React.createElement('div', { style: { background: '#f9fafb', minHeight: '100vh' } },
+    React.createElement('div', { className: 'page-container' },
+      React.createElement('h1', { style: { fontSize: '26px', fontWeight: '800', color: '#111827', margin: '0 0 4px 0' } }, '🚚 Delivery Management'),
+      React.createElement('p', { style: { color: '#6b7280', margin: '0 0 24px 0', fontSize: '14px' } }, 'Track deliveries for your orders'),
+      error && React.createElement('div', { className: 'alert-error', style: { marginBottom: '20px' } }, error),
+      deliveries.length === 0 && !error && React.createElement('div', { className: 'empty-state' },
+        React.createElement('div', { className: 'empty-icon' }, '🚚'),
+        React.createElement('h3', null, 'No deliveries yet'),
+        React.createElement('p', null, 'Deliveries are created when orders are confirmed.')
       ),
-    )
-  }
-
-  if (error) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Deliveries"),
-        React.createElement("p", null, `Error: ${error}`),
-      ),
-    )
-  }
-
-  if (!deliveries || deliveries.length === 0) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Deliveries"),
-        React.createElement("p", null, "No deliveries found."),
-      ),
-    )
-  }
-
-  return React.createElement(
-    "div",
-    { className: "min-h-screen bg-white" },
-    React.createElement(
-      "div",
-      { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-      React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Deliveries"),
-      React.createElement("p", null, `You have ${deliveries.length} delivery(s)`),
-      deliveries.map((d) => {
-        const s = statusLabels[d.status] || d.status
-        const oid = d.orderId ? d.orderId.slice(0, 8) : "N/A"
-        return React.createElement(
-          "div",
-          { key: d.id, className: "p-4 border rounded-lg mb-3" },
-          React.createElement("h4", null, "Delivery #", d.id ? d.id.slice(0, 8) : "N/A"),
-          React.createElement("p", null, "Status: ", s),
-          delivery.trackingNumber !== undefined && React.createElement("p", null, "Tracking: ", delivery.trackingNumber),
-          delivery.deliveryPartner !== undefined && React.createElement("p", null, "Partner: ", delivery.deliveryPartner),
-          delivery.estimatedDeliveryDate !== undefined && React.createElement("p", null, "Estimate: ", new Date(delivery.estimatedDeliveryDate).toLocaleDateString())
-        )
-      })
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
+        deliveries.map(d => {
+          const stepIdx = STATUS_STEPS.indexOf(d.status)
+          return React.createElement('div', { key: d.id, className: 'card' },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' } },
+              React.createElement('div', null,
+                React.createElement('h3', { style: { margin: '0 0 4px 0', fontWeight: '700' } }, `Order: ${d.orderId ? d.orderId.slice(0, 8) + '...' : 'N/A'}`),
+                d.trackingNumber && React.createElement('p', { style: { margin: 0, color: '#6b7280', fontSize: '13px' } }, `Tracking: ${d.trackingNumber}`)
+              ),
+              React.createElement('span', { className: `badge ${DELIVERY_STATUS[d.status] || 'badge-gray'}` }, STATUS_LABELS[d.status] || d.status)
+            ),
+            // Progress bar
+            d.status !== 'CANCELLED' && React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '0', marginBottom: '16px', overflowX: 'auto' } },
+              STATUS_STEPS.map((step, i) => {
+                const done = i <= stepIdx
+                return React.createElement('div', { key: step, style: { display: 'flex', alignItems: 'center', flex: i < STATUS_STEPS.length - 1 ? 1 : 'none' } },
+                  React.createElement('div', {
+                    style: { width: '28px', height: '28px', borderRadius: '50%', background: done ? '#166534' : '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.2s' }
+                  }, React.createElement('span', { style: { color: done ? '#fff' : '#9ca3af', fontSize: '12px', fontWeight: '700' } }, i + 1)),
+                  i < STATUS_STEPS.length - 1 && React.createElement('div', { style: { height: '3px', flex: 1, background: i < stepIdx ? '#166534' : '#e5e7eb', transition: 'background 0.2s', minWidth: '20px' } })
+                )
+              })
+            ),
+            React.createElement('div', { style: { fontSize: '13px', color: '#6b7280', display: 'flex', gap: '16px', flexWrap: 'wrap' } },
+              d.deliveryPartner && React.createElement('span', null, `Carrier: ${d.deliveryPartner}`),
+              d.estimatedDeliveryDate && React.createElement('span', null, `ETA: ${new Date(d.estimatedDeliveryDate).toLocaleDateString('en-IN')}`),
+              d.deliveredAt && React.createElement('span', { style: { color: '#166534', fontWeight: '600' } }, `Delivered: ${new Date(d.deliveredAt).toLocaleDateString('en-IN')}`)
+            )
+          )
+        })
+      )
     )
   )
 }

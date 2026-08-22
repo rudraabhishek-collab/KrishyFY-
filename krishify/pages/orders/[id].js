@@ -1,392 +1,172 @@
-const React = require("react")
+const React = require('react')
 
-function OrderDetailPage({ params }) {
+const STATUS_STYLES = { PENDING: 'badge-yellow', CONFIRMED: 'badge-blue', PROCESSING: 'badge-blue', COMPLETED: 'badge-green', CANCELLED: 'badge-red' }
+const DELIVERY_STATUS_LABELS = { CREATED: 'Initialized', PACKED: 'Packed', DISPATCHED: 'Dispatched', IN_TRANSIT: 'In Transit', OUT_FOR_DELIVERY: 'Out for Delivery', DELIVERED: '✓ Delivered', CANCELLED: 'Cancelled' }
+
+function OrderDetailPage({ id }) {
   const [order, setOrder] = React.useState(null)
   const [payment, setPayment] = React.useState(null)
   const [delivery, setDelivery] = React.useState(null)
-  const [timeline, setTimeline] = React.useState([])
+  const [user, setUser] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [payLoading, setPayLoading] = React.useState(false)
-  const [error, setError] = React.useState(null)
-  const [user, setUser] = React.useState(null)
-  const [paramsData, setParamsData] = React.useState({ id: params.id })
+  const [error, setError] = React.useState('')
+  const [payMsg, setPayMsg] = React.useState('')
+  const [orderId, setOrderId] = React.useState(id || null)
 
   React.useEffect(() => {
-    const path = window.location.pathname
-    const match = path.match(/^\/orders\/([^/]+)$/)
-    setParamsData(match ? { id: match[1] } : { id: params.id })
+    if (!orderId) {
+      const m = window.location.pathname.match(/\/orders\/([^/]+)$/)
+      if (m) setOrderId(m[1])
+    }
   }, [])
 
   React.useEffect(() => {
-    async function loadUser() {
-      try {
-        const res = await fetch("/api/auth/me", {
-          headers: { "Content-Type": "application/json" },
-        })
-        const data = await res.json()
-        setUser(data)
-      } catch (e) {
-        setUser(null)
+    if (!orderId) return
+    Promise.all([
+      fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json()),
+      fetch(`/api/orders/${orderId}`, { credentials: 'include' }).then(r => r.json()),
+    ]).then(([me, orderData]) => {
+      if (me.authenticated) setUser(me.user)
+      if (orderData.success) {
+        setOrder(orderData.order)
+        // Load payment info
+        fetch(`/api/payments?orderId=${orderId}`, { credentials: 'include' })
+          .then(r => r.json()).then(d => { if (d.success) setPayment(d.payment) })
+        // Load delivery
+        fetch(`/api/delivery/${orderId}`, { credentials: 'include' })
+          .then(r => r.json()).then(d => { if (d.success) setDelivery(d.delivery) }).catch(() => {})
+      } else {
+        setError(orderData.error || 'Order not found')
       }
-    }
-    loadUser()
-  }, [])
+      setLoading(false)
+    }).catch(() => { setError('Network error'); setLoading(false) })
+  }, [orderId])
 
-  React.useEffect(() => {
-    async function loadOrder() {
-      if (!paramsData.id) return
-      try {
-        const res = await fetch(`/api/orders/${paramsData.id}`, {
-          headers: { "Content-Type": "application/json" },
-        })
-        const data = await res.json()
-        if (data.success) {
-          setOrder(data.order)
-        } else {
-          setError(data.error || "Failed to load order")
-        }
-      } catch (e) {
-        setError(e.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadOrder()
-  }, [paramsData.id])
-
-  React.useEffect(() => {
-    async function loadPayment() {
-      if (!order) return
-      try {
-        const res = await fetch(`/api/payments/${order.id}`, {
-          headers: { "Content-Type": "application/json" },
-        })
-        const data = await res.json()
-        if (data.success) {
-          setPayment(data.payment)
-        }
-      } catch (e) {
-        // Payment may not exist yet, that's OK
-      }
-    }
-    if (order) {
-      loadPayment()
-    }
-  }, [order])
-
-  // Handle payment creation and Razorpay checkout
-  async function initiatePayment() {
+  function initiatePayment() {
     if (!order || payLoading) return
-    setPayLoading(true)
-    setError(null)
-
-    try {
-      // Step 1: Create Razorpay test order
-      const res = await fetch("/api/payments/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id }),
-      })
-
-      const data = await res.json()
-      if (!data.success) {
-        setError(data.error || "Failed to create payment order")
-        setPayLoading(false)
-        return
-      }
-
+    setPayLoading(true); setPayMsg('')
+    fetch('/api/payments/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ orderId: order.id })
+    }).then(r => r.json()).then(data => {
+      if (!data.success) { setPayMsg(`❌ ${data.error || 'Failed to create payment'}`); setPayLoading(false); return }
       const { razorpayOrderId, amount, currency, keyId } = data.payment
-
-      // Step 2: Open Razorpay Checkout (only in browser)
-      const script = document.createElement("script")
-      script.src = "https://checkout.razorpay.com/v1/checkout.js"
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
       script.onload = () => {
-        const rzp1 = new Razorpay({
-          key: keyId,
-          amount: amount,
-          currency: currency,
-          order_id: razorpayOrderId,
-          handler: function (response) {
-            // Step 3: Verify payment with backend
-            fetch("/api/payments/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                orderId: order.id,
-                razorpayOrderId: razorpayOrderId,
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpaySignature: response.razorpay_signature,
-              }),
+        // eslint-disable-next-line no-undef
+        const rzp = new Razorpay({
+          key: keyId, amount, currency, order_id: razorpayOrderId,
+          name: 'Krishify', description: `Order for ${order.cropName}`,
+          theme: { color: '#166534' },
+          handler: function(response) {
+            fetch('/api/payments/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ orderId: order.id, razorpayOrderId, razorpayPaymentId: response.razorpay_payment_id, razorpaySignature: response.razorpay_signature })
+            }).then(r => r.json()).then(v => {
+              if (v.success) { setPayMsg('✅ Payment successful!'); setPayment({ status: 'PAID', razorpayPaymentId: v.payment.razorpayPaymentId, amount: v.payment.amount }) }
+              else setPayMsg(`❌ ${v.error || 'Verification failed'}`)
+              setPayLoading(false)
             })
-              .then((resp) => resp.json())
-              .then((verifyData) => {
-                if (verifyData.success) {
-                  // Payment successful - update UI state
-                  setPayment({
-                    id: verifyData.payment.id,
-                    status: "PAID",
-                    razorpayPaymentId: verifyData.payment.razorpayPaymentId,
-                    amount: verifyData.payment.amount,
-                    currency: verifyData.payment.currency,
-                  })
-                  // Refresh order data
-                  loadOrder()
-                } else {
-                  setError(verifyData.error || "Payment verification failed")
-                }
-              })
-              .catch((err) => {
-                setError("Payment verification request failed")
-              })
           },
-          notes: {},
-          theme: { color: "primary" },
+          modal: { ondismiss: () => setPayLoading(false) }
         })
-
-        rzp1.open()
+        rzp.open()
       }
-      script.onerror = () => {
-        setError("Failed to load Razorpay checkout")
-        setPayLoading(false)
-      }
+      script.onerror = () => { setPayMsg('❌ Could not load Razorpay. Check your connection.'); setPayLoading(false) }
       document.body.appendChild(script)
-    } catch (err) {
-      setError("Payment initiation failed")
-      setPayLoading(false)
-    }
+    }).catch(() => { setPayMsg('❌ Network error'); setPayLoading(false) })
   }
 
-  if (loading) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("p", null, "Loading order details...")
-      ),
-    )
-  }
+  if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
+    React.createElement('div', { className: 'spinner', style: { margin: '0 auto 16px' } }),
+    React.createElement('p', { style: { color: '#6b7280' } }, 'Loading order...')
+  )
 
-  if (error) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "Order Details"),
-        React.createElement("p", null, `Error: ${error}`),
-      ),
-    )
-  }
+  if (error) return React.createElement('div', { className: 'page-container' },
+    React.createElement('div', { className: 'alert-error', style: { marginBottom: '16px' } }, error),
+    React.createElement('a', { href: '/orders', style: { color: '#166534' } }, '← Back to Orders')
+  )
 
-  if (!order) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "Order Details"),
-        React.createElement("p", null, "Order not found."),
-      ),
-    )
-  }
+  if (!order) return null
 
-  // Check authorization
-  const isBuyer = user?.role === "buyer" && order?.buyerId === user?.userId
-  const isFarmer = user?.role === "farmer" && order?.farmerId === user?.userId
+  const isBuyer = user?.role === 'buyer'
+  const isPaid = payment?.status === 'PAID'
+  const canPay = isBuyer && !isPaid && order.status !== 'CANCELLED'
 
-  if (!isBuyer && !isFarmer) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "Order Details"),
-        React.createElement("p", null, "Forbidden: unauthorized access to this order.")
-      ),
-    )
-  }
+  return React.createElement('div', { style: { background: '#f9fafb', minHeight: '100vh' } },
+    React.createElement('div', { className: 'page-container' },
+      React.createElement('a', { href: '/orders', style: { color: '#166534', textDecoration: 'none', fontSize: '14px', fontWeight: '500' } }, '← Back to Orders'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' } },
 
-  // Determine payment state
-  const isPaid = payment?.status === "PAID"
-  const isPaymentEligible = !isPaid && user?.role === "buyer"
-
-  // Delivery section
-  let deliveryUI = null
-  if (delivery) {
-    const statusLabels = {
-      CREATED: "Delivery initialized",
-      PACKED: "Delivery packed",
-      DISPATCHED: "Delivery dispatched",
-      IN_TRANSIT: "In transit",
-      OUT_FOR_DELIVERY: "Out for delivery",
-      DELIVERED: "Delivered",
-      CANCELLED: "Cancelled",
-    }
-
-    let statusText = statusLabels[delivery.status] || delivery.status
-
-    deliveryUI = React.createElement(
-      "div",
-      { className: "bg-secondary/10 rounded p-4 mb-6 mt-6" },
-      React.createElement(
-        "h3",
-        { className: "text-xl font-medium text-secondary mb-3" },
-        "Delivery Tracking"
-      ),
-      React.createElement(
-        "p",
-        { className: "text-sm text-secondary mb-2" },
-        "TEST/DEMO DELIVERY TRACKING"
-      ),
-      React.createElement(
-        "div",
-        { className: "mb-3" },
-        React.createElement(
-          "p",
-          { className: "font-medium" },
-          "Status:"
-        ),
-        React.createElement(
-          "span",
-          { className: `text-${delivery.status.toLowerCase()} mb-1` },
-          statusText
-        )
-      )
-    )
-
-    if (delivery.status !== "DELIVERED" && delivery.status !== "CANCELLED") {
-      let trackingRow = null
-      if (delivery.trackingNumber !== undefined && delivery.trackingNumber !== null) {
-        trackingRow = React.createElement(
-          "div",
-          { className: "mb-2" },
-          React.createElement("strong", null, "Tracking Number:"),
-          ` ${delivery.trackingNumber}`
-        )
-      }
-      let partnerRow = null
-      if (delivery.deliveryPartner !== undefined && delivery.deliveryPartner !== null) {
-        partnerRow = React.createElement(
-          "div",
-          { className: "mb-2" },
-          React.createElement("strong", null, "Delivery Partner:"),
-          ` ${delivery.deliveryPartner}`
-        )
-      }
-      let estRow = null
-      if (delivery.estimatedDeliveryDate !== undefined && delivery.estimatedDeliveryDate !== null) {
-        const estDate = new Date(delivery.estimatedDeliveryDate).toLocaleDateString()
-        estRow = React.createElement(
-          "div",
-          { className: "mb-2" },
-          React.createElement("strong", null, "Estimated Delivery:"),
-          ` ${estDate}`
-        )
-      }
-      deliveryUI = React.createElement(
-        "div",
-        null,
-        trackingRow,
-        partnerRow,
-        estRow
-      )
-    }
-
-    if (delivery.status !== "DELIVERED" && delivery.status !== "CANCELLED") {
-      let timelineItems = []
-      for (const event of timeline) {
-        const eventDate = new Date(event.createdAt).toLocaleString()
-        timelineItems.push(React.createElement(
-          "li",
-          { key: event.id, className: "mb-1" },
-          React.createElement("span", { className: "text-secondary" }, event.title, ` • ${eventDate}`)
-        ))
-      }
-      deliveryUI = React.createElement(
-        "div",
-        null,
-        deliveryUI,
-        React.createElement(
-          "div",
-          { className: "mt-3 p-3 bg-secondary/5 rounded" },
-          React.createElement("p", { className: "text-xs text-secondary mb-1" }, "Timeline:"),
-          React.createElement(
-            "ul",
-            { className: "list-disc pl-3 text-secondary text-sm mt-1" },
-            timelineItems
+        // Order info
+        React.createElement('div', { className: 'card', style: { gridColumn: 'span 2' } },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' } },
+            React.createElement('div', null,
+              React.createElement('h1', { style: { fontSize: '24px', fontWeight: '800', margin: '0 0 4px 0' } }, order.cropName),
+              React.createElement('p', { style: { color: '#6b7280', margin: 0, fontSize: '13px' } }, `Order #${order.id.slice(0, 8).toUpperCase()}`)
+            ),
+            React.createElement('span', { className: `badge ${STATUS_STYLES[order.status] || 'badge-gray'}` }, order.status)
+          ),
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' } },
+            infoBox('👨‍🌾 Farmer', order.farmerName || '—'),
+            infoBox('🛒 Buyer', order.buyerName || '—'),
+            infoBox('📦 Quantity', `${order.quantity} ${order.unit}`),
+            infoBox('💰 Price/Unit', `₹${Number(order.pricePerUnit).toLocaleString('en-IN')}`),
+            infoBox('💵 Total Amount', `₹${Number(order.totalAmount).toLocaleString('en-IN')}`),
+            infoBox('📅 Placed On', new Date(order.createdAt).toLocaleDateString('en-IN')),
           )
+        ),
+
+        // Payment card
+        React.createElement('div', { className: 'card' },
+          React.createElement('h2', { style: { fontSize: '17px', fontWeight: '700', margin: '0 0 16px 0' } }, '💳 Payment'),
+          React.createElement('div', { style: { padding: '14px', borderRadius: '8px', background: isPaid ? '#dcfce7' : '#fef9c3', marginBottom: '14px' } },
+            React.createElement('div', { style: { fontWeight: '700', color: isPaid ? '#166534' : '#854d0e', marginBottom: '4px' } }, isPaid ? '✅ Payment Complete' : '⏳ Payment Pending'),
+            isPaid && React.createElement('div', { style: { fontSize: '12px', color: '#6b7280' } }, `ID: ${payment.razorpayPaymentId || 'N/A'}`),
+            isPaid && React.createElement('div', { style: { fontSize: '12px', color: '#6b7280' } }, `Amount: ₹${Number(payment.amount / 100).toLocaleString('en-IN')}`)
+          ),
+          payMsg && React.createElement('div', { className: payMsg.startsWith('✅') ? 'alert-success' : 'alert-error', style: { marginBottom: '12px', fontSize: '13px' } }, payMsg),
+          canPay && React.createElement('div', null,
+            React.createElement('div', { style: { background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#92400e' } }, '⚠️ TEST MODE — No real money charged'),
+            React.createElement('button', {
+              onClick: initiatePayment, disabled: payLoading, className: 'btn-primary',
+              style: { width: '100%', padding: '12px', fontSize: '15px' }
+            }, payLoading ? 'Processing...' : `Pay ₹${Number(order.totalAmount).toLocaleString('en-IN')}`)
+          ),
+          !isBuyer && React.createElement('p', { style: { fontSize: '13px', color: '#9ca3af' } }, 'Only the buyer can make payment.')
+        ),
+
+        // Delivery card
+        delivery && React.createElement('div', { className: 'card' },
+          React.createElement('h2', { style: { fontSize: '17px', fontWeight: '700', margin: '0 0 16px 0' } }, '🚚 Delivery Tracking'),
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px' } },
+            React.createElement('span', { style: { fontWeight: '600', color: '#374151' } }, 'Status'),
+            React.createElement('span', { style: { fontWeight: '700', color: '#166534' } }, DELIVERY_STATUS_LABELS[delivery.status] || delivery.status)
+          ),
+          delivery.trackingNumber && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `Tracking: ${delivery.trackingNumber}`),
+          delivery.deliveryPartner && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `Carrier: ${delivery.deliveryPartner}`),
+          delivery.estimatedDeliveryDate && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `ETA: ${new Date(delivery.estimatedDeliveryDate).toLocaleDateString('en-IN')}`),
+          delivery.deliveredAt && React.createElement('p', { style: { fontSize: '13px', color: '#166534', fontWeight: '600', margin: '4px 0' } }, `Delivered: ${new Date(delivery.deliveredAt).toLocaleDateString('en-IN')}`)
         )
       )
-    }
-  }
-
-  return React.createElement(
-    "div",
-    { className: "min-h-screen bg-white" },
-    React.createElement(
-      "div",
-      { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-      React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "Order Details"),
-      React.createElement("p", null, `Order ID: ${order.id}`),
-      React.createElement("p", null, `Crop: ${order.cropName}`),
-      React.createElement("p", null, `Buyer: ${order.buyerName}`),
-      React.createElement("p", null, `Farmer: ${order.farmerName}`),
-      React.createElement("p", null, `Quantity: ${order.quantity} ${order.unit}`),
-      React.createElement("p", null, `Price per unit: ₹${order.pricePerUnit}`),
-      React.createElement("p", null, `Total amount: ₹${order.totalAmount}`),
-      React.createElement("p", null, `Status: ${order.status}`),
-      React.createElement("p", null, `Created: ${new Date(order.createdAt).toLocaleString()}`),
-
-      // Payment section
-      React.createElement(
-        "div",
-        { className: "mt-6 p-4 border rounded-lg" },
-        isPaid
-          ? React.createElement(
-              "p",
-              null,
-              "Payment: Successful ✓",
-              React.createElement("br", null),
-              `Razorpay Payment ID: ${payment?.razorpayPaymentId || "N/A"}`
-            )
-          : isPaymentEligible
-            ? React.createElement(
-                "button",
-                {
-                  id: "payNowBtn",
-                  className: "mt-2 px-4 py-2 bg-primary text-white rounded",
-                  onClick: initiatePayment,
-                  disabled: payLoading,
-                },
-                payLoading
-                  ? "Processing payment..."
-                  : "Pay Now"
-              )
-            : React.createElement(
-                "p",
-                null,
-                "Payment unavailable. Only the buyer can pay for this order."
-              ),
-      ),
-
-      deliveryUI,
-
-      React.createElement(
-        "a",
-        {
-          href: "/",
-          className: "mt-4 text-primary underline",
-        },
-        "Back to home"
-      ),
-    ),
+    )
   )
 }
 
-// params parsed in useEffect, no top-level window access
+function infoBox(label, value) {
+  return React.createElement('div', { style: { background: '#f9fafb', borderRadius: '8px', padding: '12px' } },
+    React.createElement('div', { style: { fontSize: '11px', color: '#9ca3af', fontWeight: '600', marginBottom: '4px' } }, label),
+    React.createElement('div', { style: { fontWeight: '600', color: '#111827', fontSize: '14px' } }, value)
+  )
+}
+
 module.exports = OrderDetailPage
+module.exports.getServerSideProps = async function(ctx) {
+  return { props: { id: ctx.params.id } }
+}

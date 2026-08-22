@@ -2,7 +2,11 @@ require("dotenv/config")
 const mysql = require("mysql2/promise")
 const bcrypt = require("bcrypt")
 
-exports.default = async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
+
   try {
     const body = req.body || {}
     const { email, password } = body
@@ -52,21 +56,18 @@ exports.default = async function handler(req, res) {
         [sessionId, user.id, expires]
       )
 
-      // Set session cookie
-      res.cookie("krishify_session", sessionId, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 24 * 60 * 60,
-      })
+      // Set session cookie - Next.js uses res.setHeader for cookies
+      res.setHeader(
+        "Set-Cookie",
+        `krishify_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${24 * 60 * 60}`
+      )
 
       return res.status(200).json({
+        success: true,
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
-        sessionId,
       })
     } finally {
       connection.release()
@@ -76,3 +77,5 @@ exports.default = async function handler(req, res) {
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

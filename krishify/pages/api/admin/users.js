@@ -91,3 +91,4 @@ module.exports = async function handler(req, res) {
 }
 
 const validRoles = ["admin", "buyer", "farmer"]
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

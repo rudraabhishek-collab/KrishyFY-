@@ -1,7 +1,11 @@
 require("dotenv/config")
 const mysql = require("mysql2/promise")
 
-exports.default = async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
+
   try {
     const sessionId = req.cookies["krishify_session"]
 
@@ -19,20 +23,14 @@ exports.default = async function handler(req, res) {
 
     try {
       if (sessionId) {
-        // Delete session
-        await connection.execute(
-          "DELETE FROM Session WHERE id = ?",
-          [sessionId]
-        )
+        await connection.execute("DELETE FROM Session WHERE id = ?", [sessionId])
       }
 
-      // Clear cookie
-      res.clearCookie("krishify_session", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-      })
+      // Clear cookie via setHeader
+      res.setHeader(
+        "Set-Cookie",
+        "krishify_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      )
 
       return res.status(200).json({ success: true })
     } finally {
@@ -40,12 +38,12 @@ exports.default = async function handler(req, res) {
     }
   } catch (error) {
     console.error("Logout error:", error)
-    res.clearCookie("krishify_session", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    })
+    res.setHeader(
+      "Set-Cookie",
+      "krishify_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    )
     return res.status(200).json({ success: true })
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

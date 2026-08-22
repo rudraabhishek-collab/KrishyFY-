@@ -1,22 +1,21 @@
 const React = require('react')
-const Document = require('next/document')
+const { Html, Head, Main, NextScript } = require('next/document')
+const Document = require('next/document').default
 
-function MyDocument({ children }) {
-  return React.createElement(
-    Document,
-    null,
-    React.createElement(
-      'html',
-      null,
+class MyDocument extends Document {
+  render() {
+    return React.createElement(
+      Html,
+      { lang: 'en' },
+      React.createElement(Head),
       React.createElement(
         'body',
         null,
-        React.createElement('div', { id: '__next' }, children)
+        React.createElement(Main),
+        React.createElement(NextScript)
       )
     )
-  )
+  }
 }
-
-MyDocument.getInitialProps = Document.getInitialProps
 
 module.exports = MyDocument

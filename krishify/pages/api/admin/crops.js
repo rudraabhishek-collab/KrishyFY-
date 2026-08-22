@@ -1,10 +1,10 @@
 const mysql = require("mysql2/promise")
+const { adminAuth } = require("../../../lib/adminAuth")
 
 module.exports = async function handler(req, res) {
-  // Admin authorization
-  const sessionId = req.cookies?.krishify_session
-  if (!sessionId) {
-    return res.status(401).json({ error: "Unauthenticated" })
+  const auth = await adminAuth(req)
+  if (!auth.success) {
+    return res.status(auth.error === "Unauthenticated" ? 401 : 403).json({ error: auth.error })
   }
 
   const pool = mysql.createPool({
@@ -20,66 +20,55 @@ module.exports = async function handler(req, res) {
   const connection = await pool.getConnection()
 
   try {
-    // Get all crops with optional filtering
     const { status, category, search, page = 1, limit = 20 } = req.query
     const pageNum = parseInt(page, 10)
     const pageSize = parseInt(limit, 10)
     const offset = (pageNum - 1) * pageSize
 
-    let whereClause = ""
-    let whereParams = []
+    const conditions = []
+    const whereParams = []
 
     if (status) {
-      whereClause = "WHERE status = ?"
+      conditions.push("cl.status = ?")
       whereParams.push(status)
     }
-
     if (category) {
-      if (whereClause) {
-        whereClause += " AND category = ?"
-      } else {
-        whereClause = "WHERE category = ?"
-      }
+      conditions.push("cl.category = ?")
       whereParams.push(category)
     }
-
     if (search) {
-      if (whereClause) {
-        whereClause += " AND (name LIKE ? OR description LIKE ?)"
-      } else {
-        whereClause = "WHERE (name LIKE ? OR description LIKE ?)"
-      }
+      conditions.push("(cl.cropName LIKE ? OR cl.description LIKE ?)")
       whereParams.push(`%${search}%`, `%${search}%`)
     }
 
-    // Get total count
+    const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : ""
+
     const [countResult] = await connection.execute(
-      `SELECT COUNT(*) as total FROM CropListing ${whereClause}`,
+      `SELECT COUNT(*) AS total FROM CropListing cl ${whereClause}`,
       whereParams
     )
     const total = countResult[0].total
     const totalPages = Math.ceil(total / pageSize)
 
-    // Get crops with pagination
     const [crops] = await connection.execute(
-      `SELECT id, name, description, category, price, quantity, unit, status, createdAt, updatedAt FROM CropListing ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+      `SELECT cl.id, cl.cropName, cl.category, cl.description, cl.quantity, cl.unit,
+              cl.expectedPrice, cl.location, cl.status, cl.createdAt,
+              u.name AS farmerName
+       FROM CropListing cl
+       JOIN User u ON cl.farmerId = u.id
+       ${whereClause}
+       ORDER BY cl.createdAt DESC
+       LIMIT ? OFFSET ?`,
       [...whereParams, pageSize, offset]
     )
 
-    return res.status(200).json({
-      success: true,
-      crops,
-      pagination: {
-        page: pageNum,
-        limit: pageSize,
-        total,
-        totalPages,
-      },
-    })
+    return res.status(200).json({ success: true, crops, pagination: { page: pageNum, limit: pageSize, total, totalPages } })
   } catch (error) {
     console.error("Admin crops error:", error)
     return res.status(500).json({ error: "Internal server error" })
   } finally {
-    await connection.end()
+    connection.release()
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

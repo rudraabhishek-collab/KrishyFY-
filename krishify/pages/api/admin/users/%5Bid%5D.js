@@ -112,3 +112,4 @@ module.exports = async function handler(req, res) {
     await connection.end()
   }
 }
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

@@ -2,7 +2,11 @@ require("dotenv/config")
 const mysql = require("mysql2/promise")
 const bcrypt = require("bcrypt")
 
-exports.default = async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" })
+  }
+
   try {
     const body = req.body || {}
     const { name, email, password, role } = body
@@ -12,10 +16,9 @@ exports.default = async function handler(req, res) {
     }
 
     // Validate role - only farmer and buyer allowed during public registration
-    // Admin role can only be provisioned manually by existing admins
     const validRoles = ["farmer", "buyer"]
     if (role && !validRoles.includes(role)) {
-      return res.status(400).json({ error: "Invalid role. Admin role must be provisioned manually." })
+      return res.status(400).json({ error: "Invalid role. Must be farmer or buyer." })
     }
 
     const pool = mysql.createPool({
@@ -42,23 +45,24 @@ exports.default = async function handler(req, res) {
       }
 
       // Hash password
-      const saltRounds = 10
-      const hashedPassword = await bcrypt.hash(password, saltRounds)
+      const hashedPassword = await bcrypt.hash(password, 10)
 
-      // Create user with role from request or default to farmer
-      const userRole = role || "farmer"
+      const userRole = role || "buyer"
 
-      const [result] = await connection.execute(
+      // UUID() used for id
+      await connection.execute(
         "INSERT INTO User (id, name, email, password, role, createdAt) VALUES (UUID(), ?, ?, ?, ?, NOW())",
         [name, email, hashedPassword, userRole]
       )
 
+      // Fetch the created user (can't use insertId because UUID)
       const [users] = await connection.execute(
-        "SELECT id, name, email, role FROM User WHERE id = ?",
-        [result.insertId]
+        "SELECT id, name, email, role FROM User WHERE email = ?",
+        [email]
       )
 
       return res.status(201).json({
+        success: true,
         id: users[0].id,
         name: users[0].name,
         email: users[0].email,
@@ -72,3 +76,5 @@ exports.default = async function handler(req, res) {
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

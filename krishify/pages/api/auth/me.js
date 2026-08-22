@@ -1,7 +1,7 @@
 require("dotenv/config")
 const mysql = require("mysql2/promise")
 
-exports.default = async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     const sessionId = req.cookies["krishify_session"]
 
@@ -23,8 +23,13 @@ exports.default = async function handler(req, res) {
 
     try {
       // Find session with user data, check expiration
+      // Use explicit column aliases to avoid collision
       const [rows] = await connection.execute(
-        "SELECT s.id, s.userId, s.expires, s.createdAt, u.id, u.name, u.email, u.role FROM Session s JOIN User u ON s.userId = u.id WHERE s.id = ? AND s.expires > NOW()",
+        `SELECT s.id AS sessionId, s.expires,
+                u.id AS userId, u.name AS userName, u.email AS userEmail, u.role AS userRole
+         FROM Session s
+         JOIN User u ON s.userId = u.id
+         WHERE s.id = ? AND s.expires > NOW()`,
         [sessionId]
       )
 
@@ -32,14 +37,14 @@ exports.default = async function handler(req, res) {
         return res.status(200).json({ authenticated: false, user: null })
       }
 
-      const session = rows[0]
+      const row = rows[0]
       return res.status(200).json({
         authenticated: true,
         user: {
-          id: session.u.id,
-          name: session.u.name,
-          email: session.u.email,
-          role: session.u.role,
+          id: row.userId,
+          name: row.userName,
+          email: row.userEmail,
+          role: row.userRole,
         },
       })
     } finally {
@@ -50,3 +55,5 @@ exports.default = async function handler(req, res) {
     return res.status(500).json({ authenticated: false, user: null })
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

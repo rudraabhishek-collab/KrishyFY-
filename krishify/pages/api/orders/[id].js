@@ -2,7 +2,7 @@ const mysql = require("mysql2/promise")
 
 async function handler(req, res) {
   try {
-    const orderId = req.params.id
+    const orderId = req.query.id
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required" })
     }
@@ -22,7 +22,7 @@ async function handler(req, res) {
 
 async function getOrderDetailHandler(req, res) {
   try {
-    const orderId = req.params.id
+    const orderId = req.query.id
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required" })
     }
@@ -94,7 +94,7 @@ async function getOrderDetailHandler(req, res) {
 
 async function updateOrderStatusHandler(req, res) {
   try {
-    const orderId = req.params.id
+    const orderId = req.query.id
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required" })
     }
@@ -224,3 +224,4 @@ async function updateOrderStatusHandler(req, res) {
 
 exports.default = handler
 module.exports = handler
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

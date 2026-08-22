@@ -1,122 +1,91 @@
-const React = require("react")
+const React = require('react')
+
+const STATUS_STYLES = { PENDING: 'badge-yellow', CONFIRMED: 'badge-blue', PROCESSING: 'badge-blue', COMPLETED: 'badge-green', CANCELLED: 'badge-red' }
+const TRANSITIONS = { PENDING: ['CONFIRMED', 'CANCELLED'], CONFIRMED: ['PROCESSING', 'CANCELLED'], PROCESSING: ['COMPLETED', 'CANCELLED'], COMPLETED: [], CANCELLED: [] }
 
 function FarmerOrdersPage() {
-  const [orders, setOrders] = React.useState(null)
+  const [orders, setOrders] = React.useState([])
   const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState(null)
-  const [user] = React.useState(() => {
-    try {
-      const sessionId = document.cookie.match(/krishify_session=([^;]+)/)
-      return sessionId ? { sessionId: sessionId[1] } : null
-    } catch {
-      return null
-    }
-  })
+  const [error, setError] = React.useState('')
+  const [updating, setUpdating] = React.useState({})
+  const [msg, setMsg] = React.useState('')
 
   React.useEffect(() => {
-    async function loadOrders() {
-      try {
-        const res = await fetch("/api/orders", {
-          headers: { "Content-Type": "application/json" },
-        })
-        const data = await res.json()
-        if (data.success) {
-          setOrders(data.orders)
-        } else {
-          setError(data.error || "Failed to load orders")
-        }
-      } catch (e) {
-        setError(e.message)
-      } finally {
+    fetch('/api/orders', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) setOrders(data.orders || [])
+        else if (data.error?.includes('Unauthenticated')) window.location.href = '/login'
+        else setError(data.error || 'Failed to load')
         setLoading(false)
-      }
-    }
-    if (user?.sessionId) {
-      loadOrders()
-    } else {
-      setError("Unauthenticated")
-      setLoading(false)
-    }
-  }, [user])
+      }).catch(() => { setError('Network error'); setLoading(false) })
+  }, [])
 
-  if (loading) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("p", null, "Loading orders...")
-      ),
-    )
+  function updateStatus(orderId, status) {
+    setUpdating(u => ({ ...u, [orderId]: true })); setMsg('')
+    fetch(`/api/orders/${orderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ status })
+    }).then(r => r.json()).then(data => {
+      if (data.success) {
+        setOrders(o => o.map(ord => ord.id === orderId ? { ...ord, status } : ord))
+        setMsg(`✅ Order updated to ${status}`)
+      } else setMsg(`❌ ${data.error}`)
+      setUpdating(u => ({ ...u, [orderId]: false }))
+    }).catch(() => { setMsg('❌ Network error'); setUpdating(u => ({ ...u, [orderId]: false })) })
   }
 
-  if (error) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Orders"),
-        React.createElement("p", null, `Error: ${error}`),
-      ),
-    )
-  }
+  if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
+    React.createElement('div', { className: 'spinner', style: { margin: '0 auto 16px' } }),
+    React.createElement('p', { style: { color: '#6b7280' } }, 'Loading orders...')
+  )
 
-  if (!orders || orders.length === 0) {
-    return React.createElement(
-      "div",
-      { className: "min-h-screen bg-white" },
-      React.createElement(
-        "div",
-        { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-        React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Orders"),
-        React.createElement("p", null, "No orders found."),
+  return React.createElement('div', { style: { background: '#f9fafb', minHeight: '100vh' } },
+    React.createElement('div', { className: 'page-container' },
+      React.createElement('div', { style: { marginBottom: '24px' } },
+        React.createElement('h1', { style: { fontSize: '26px', fontWeight: '800', color: '#111827', margin: '0 0 4px 0' } }, '📦 Orders for My Crops'),
+        React.createElement('p', { style: { color: '#6b7280', margin: 0, fontSize: '14px' } }, `${orders.length} order${orders.length !== 1 ? 's' : ''}`)
       ),
-    )
-  }
-
-  return React.createElement(
-    "div",
-    { className: "min-h-screen bg-white" },
-    React.createElement(
-      "div",
-      { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
-      React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "My Orders"),
-      React.createElement(
-        "p",
-        null,
-        `You have ${orders.length} order(s) for your crops`
+      error && React.createElement('div', { className: 'alert-error', style: { marginBottom: '20px' } }, error),
+      msg && React.createElement('div', { className: msg.startsWith('✅') ? 'alert-success' : 'alert-error', style: { marginBottom: '20px' } }, msg),
+      orders.length === 0 && !error && React.createElement('div', { className: 'empty-state' },
+        React.createElement('div', { className: 'empty-icon' }, '📦'),
+        React.createElement('h3', null, 'No orders yet'),
+        React.createElement('p', null, 'Orders will appear here when buyers purchase your crops.')
       ),
-      React.createElement(
-        "ul",
-        { className: "space-y-4 mt-8" },
-        orders.map((order) =>
-          React.createElement(
-            "li",
-            { key: order.id, className: "p-4 border rounded-lg" },
-            React.createElement("h3", { className: "text-xl font-medium" }, `Order #${order.id.slice(0, 8)}`),
-            React.createElement("p", null, `Buyer: ${order.buyerName}`),
-            React.createElement("p", null, `Crop: ${order.cropName}`),
-            React.createElement("p", null, `Quantity: ${order.quantity} ${order.unit}`),
-            React.createElement("p", null, `Amount: ₹${order.totalAmount}`),
-            React.createElement("p", null, `Status: ${order.status}`),
-            React.createElement("p", null, `Date: ${new Date(order.createdAt).toLocaleString()}`),
-            order.status !== "COMPLETED" && order.status !== "CANCELLED"
-              ? React.createElement(
-                  "button",
-                  {
-                    className: "mt-2 text-primary underline",
-                    onClick: () => window.location.href = `/api/orders/${order.id}?status=CONFIRMED`,
-                  },
-                  "Update status"
-                )
-              : null
+      React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+        orders.map(o => {
+          const next = TRANSITIONS[o.status] || []
+          return React.createElement('div', { key: o.id, className: 'card' },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' } },
+              React.createElement('div', null,
+                React.createElement('h3', { style: { margin: '0 0 4px 0', fontWeight: '700', fontSize: '17px' } }, o.cropName),
+                React.createElement('p', { style: { margin: 0, color: '#6b7280', fontSize: '13px' } }, `Buyer: ${o.buyerName}`)
+              ),
+              React.createElement('span', { className: `badge ${STATUS_STYLES[o.status] || 'badge-gray'}` }, o.status)
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '14px', color: '#374151', marginBottom: '12px' } },
+              React.createElement('span', null, `📦 ${o.quantity} ${o.unit}`),
+              React.createElement('span', null, `💰 ₹${Number(o.totalAmount).toLocaleString('en-IN')}`),
+              React.createElement('span', null, `📅 ${new Date(o.createdAt).toLocaleDateString('en-IN')}`)
+            ),
+            next.length > 0 && React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+              next.map(s => React.createElement('button', {
+                key: s, onClick: () => updateStatus(o.id, s),
+                disabled: updating[o.id],
+                style: {
+                  padding: '5px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+                  background: s === 'CANCELLED' ? '#fee2e2' : '#dcfce7',
+                  color: s === 'CANCELLED' ? '#991b1b' : '#166534'
+                }
+              }, updating[o.id] ? '...' : `→ ${s}`))
+            )
           )
-        ),
-      ),
-    ),
+        })
+      )
+    )
   )
 }
 

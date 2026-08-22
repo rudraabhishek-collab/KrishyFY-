@@ -1,75 +1,133 @@
 const mysql = require("mysql2/promise")
 
+const pool = mysql.createPool({
+  host: "localhost",
+  user: "root",
+  password: "ROOT",
+  database: "krishify",
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+})
+
+async function getSession(sessionId) {
+  if (!sessionId) return null
+  const connection = await pool.getConnection()
+  try {
+    const [sessions] = await connection.execute(
+      "SELECT s.id, s.userId, u.role FROM Session s JOIN User u ON s.userId = u.id WHERE s.id = ? AND s.expires > NOW()",
+      [sessionId]
+    )
+    return sessions.length > 0 ? sessions[0] : null
+  } finally {
+    connection.release()
+  }
+}
+
 module.exports = async function handler(req, res) {
   try {
-    // Build WHERE clause for ACTIVE listings only
-    const conditions = ["cl.status = 'ACTIVE'"]
+    if (req.method === "GET") return getListingsHandler(req, res)
+    if (req.method === "POST") return createListingHandler(req, res)
+    return res.status(405).json({ error: "Method not allowed" })
+  } catch (error) {
+    console.error("Crops API error:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
 
-    // Search filter
+async function getListingsHandler(req, res) {
+  const connection = await pool.getConnection()
+  try {
+    const conditions = ["cl.status = 'ACTIVE'"]
+    const params = []
+
     if (req.query.search) {
       conditions.push("(cl.cropName LIKE ? OR cl.description LIKE ?)")
-      const searchTerm = `%${req.query.search}%`
-      // note: will bind parameters below
+      params.push(`%${req.query.search}%`, `%${req.query.search}%`)
     }
 
-    // Category filter
     if (req.query.category) {
       conditions.push("cl.category = ?")
+      params.push(req.query.category)
     }
 
-    // Location filter
     if (req.query.location) {
-      conditions.push("cl.location = ?")
+      conditions.push("cl.location LIKE ?")
+      params.push(`%${req.query.location}%`)
+    }
+
+    // Single listing by id
+    if (req.query.id) {
+      conditions.push("cl.id = ?")
+      params.push(req.query.id)
     }
 
     const whereClause = conditions.join(" AND ")
 
-    const pool = mysql.createPool({
-      host: "localhost",
-      user: "root",
-      password: "ROOT",
-      database: "krishify",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
+    const [listings] = await connection.execute(
+      `SELECT cl.id, cl.cropName, cl.category, cl.description, cl.quantity, cl.unit,
+              cl.expectedPrice, cl.location, cl.harvestDate, cl.status, cl.createdAt,
+              cl.farmerId,
+              u.name AS farmerName
+       FROM CropListing cl
+       JOIN User u ON cl.farmerId = u.id
+       WHERE ${whereClause}
+       ORDER BY cl.createdAt DESC`,
+      params
+    )
 
-    const connection = await pool.getConnection()
-
-    try {
-      // Build query with parameterized filters
-      let query = `SELECT cl.*, u.name as farmerName, u.location as farmerLocation FROM CropListing cl JOIN User u ON cl.farmerId = u.id WHERE ${whereClause} ORDER BY cl.createdAt DESC`
-      let params = []
-
-      // Add search parameters
-      if (req.query.search) {
-        query = query.replace("cl.cropName LIKE ?", "cl.cropName LIKE ?")
-        query = query.replace("cl.description LIKE ?", "cl.description LIKE ?")
-        params.push(`%${req.query.search}%`, `%${req.query.search}%`)
+    if (req.query.id) {
+      if (listings.length === 0) {
+        return res.status(404).json({ error: "Crop listing not found" })
       }
-
-      // Add category parameter
-      if (req.query.category) {
-        params.push(req.query.category)
-      }
-
-      // Add location parameter
-      if (req.query.location) {
-        params.push(req.query.location)
-      }
-
-      const [listings] = await connection.execute(query, params)
-
-      return res.status(200).json({
-        success: true,
-        listings,
-        count: listings.length,
-      })
-    } finally {
-      connection.release()
+      return res.status(200).json({ success: true, listing: listings[0] })
     }
-  } catch (error) {
-    console.error("Get marketplace listings error:", error)
-    return res.status(500).json({ error: "Internal server error" })
+
+    return res.status(200).json({ success: true, listings, count: listings.length })
+  } finally {
+    connection.release()
   }
 }
+
+async function createListingHandler(req, res) {
+  const sessionId = req.cookies["krishify_session"]
+  const user = await getSession(sessionId)
+
+  if (!user) {
+    return res.status(401).json({ error: "Unauthenticated or session expired" })
+  }
+  if (user.role !== "farmer") {
+    return res.status(403).json({ error: "Farmer role required" })
+  }
+
+  const body = req.body || {}
+  const { cropName, category, description, quantity, unit, expectedPrice, location, harvestDate } = body
+
+  if (!cropName || !category || !quantity || !unit || !location) {
+    return res.status(400).json({ error: "cropName, category, quantity, unit, and location are required" })
+  }
+
+  const connection = await pool.getConnection()
+  try {
+    const listingId = require("crypto").randomUUID()
+    const harvest = harvestDate ? new Date(harvestDate) : null
+    const price = expectedPrice ? Number(expectedPrice) : null
+
+    await connection.execute(
+      `INSERT INTO CropListing (id, farmerId, cropName, category, description, quantity, unit, expectedPrice, location, harvestDate, status, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW(), NOW())`,
+      [listingId, user.userId, cropName, category, description || null, String(quantity), unit, price, location, harvest]
+    )
+
+    const [listings] = await connection.execute(
+      "SELECT * FROM CropListing WHERE id = ?",
+      [listingId]
+    )
+
+    return res.status(201).json({ success: true, listing: listings[0] })
+  } finally {
+    connection.release()
+  }
+}
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

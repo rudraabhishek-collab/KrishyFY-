@@ -1,10 +1,10 @@
 const mysql = require("mysql2/promise")
+const { adminAuth } = require("../../../lib/adminAuth")
 
 module.exports = async function handler(req, res) {
-  // Admin authorization
-  const sessionId = req.cookies?.krishify_session
-  if (!sessionId) {
-    return res.status(401).json({ error: "Unauthenticated" })
+  const auth = await adminAuth(req)
+  if (!auth.success) {
+    return res.status(auth.error === "Unauthenticated" ? 401 : 403).json({ error: auth.error })
   }
 
   const pool = mysql.createPool({
@@ -20,7 +20,6 @@ module.exports = async function handler(req, res) {
   const connection = await pool.getConnection()
 
   try {
-    // Get all deliveries with optional filtering
     const { status, page = 1, limit = 20 } = req.query
     const pageNum = parseInt(page, 10)
     const pageSize = parseInt(limit, 10)
@@ -30,38 +29,35 @@ module.exports = async function handler(req, res) {
     let whereParams = []
 
     if (status) {
-      whereClause = "WHERE status = ?"
+      whereClause = "WHERE d.status = ?"
       whereParams.push(status)
     }
 
-    // Get total count
     const [countResult] = await connection.execute(
-      `SELECT COUNT(*) as total FROM Delivery ${whereClause}`,
+      `SELECT COUNT(*) AS total FROM Delivery d ${whereClause}`,
       whereParams
     )
     const total = countResult[0].total
     const totalPages = Math.ceil(total / pageSize)
 
-    // Get deliveries with pagination
     const [deliveries] = await connection.execute(
-      `SELECT id, orderId, recipientName, recipientAddress, status, createdAt, updatedAt FROM Delivery ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+      `SELECT d.id, d.orderId, d.status, d.trackingNumber, d.deliveryPartner,
+              d.estimatedDeliveryDate, d.dispatchedAt, d.deliveredAt, d.createdAt,
+              d.updatedAt
+       FROM Delivery d
+       ${whereClause}
+       ORDER BY d.createdAt DESC
+       LIMIT ? OFFSET ?`,
       [...whereParams, pageSize, offset]
     )
 
-    return res.status(200).json({
-      success: true,
-      deliveries,
-      pagination: {
-        page: pageNum,
-        limit: pageSize,
-        total,
-        totalPages,
-      },
-    })
+    return res.status(200).json({ success: true, deliveries, pagination: { page: pageNum, limit: pageSize, total, totalPages } })
   } catch (error) {
     console.error("Admin deliveries error:", error)
     return res.status(500).json({ error: "Internal server error" })
   } finally {
-    await connection.end()
+    connection.release()
   }
 }
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }
