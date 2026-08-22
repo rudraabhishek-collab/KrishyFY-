@@ -113,3 +113,29 @@ model CropQualityAssessment {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
+
+// New: Delivery model for logistics tracking
+model Delivery {
+  id              String     @id @default(uuid())
+  orderId         String     @unique
+  status          String     @default("CREATED")
+  trackingNumber  String?    @db.VarChar(100)
+  deliveryPartner String?    @db.VarChar(100)
+  estimatedDeliveryDate DateTime?
+  dispatchedAt    DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// New: DeliveryEvent for tracking history
+model DeliveryEvent {
+  id              String     @id @default(uuid())
+  deliveryId      String
+  status          String
+  title           String
+  description     String?
+  location        String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}

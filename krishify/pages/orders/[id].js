@@ -3,6 +3,8 @@ const React = require("react")
 function OrderDetailPage({ params }) {
   const [order, setOrder] = React.useState(null)
   const [payment, setPayment] = React.useState(null)
+  const [delivery, setDelivery] = React.useState(null)
+  const [timeline, setTimeline] = React.useState([])
   const [loading, setLoading] = React.useState(true)
   const [payLoading, setPayLoading] = React.useState(false)
   const [error, setError] = React.useState(null)
@@ -204,7 +206,7 @@ function OrderDetailPage({ params }) {
         "div",
         { className: "max-w-2xl mx-auto py-12 px-4 text-center" },
         React.createElement("h2", { className: "text-3xl font-bold text-primary" }, "Order Details"),
-        React.createElement("p", null, "Forbidden: unauthorized access to this order."),
+        React.createElement("p", null, "Forbidden: unauthorized access to this order.")
       ),
     )
   }
@@ -212,6 +214,116 @@ function OrderDetailPage({ params }) {
   // Determine payment state
   const isPaid = payment?.status === "PAID"
   const isPaymentEligible = !isPaid && user?.role === "buyer"
+
+  // Delivery section
+  let deliveryUI = null
+  if (delivery) {
+    const statusLabels = {
+      CREATED: "Delivery initialized",
+      PACKED: "Delivery packed",
+      DISPATCHED: "Delivery dispatched",
+      IN_TRANSIT: "In transit",
+      OUT_FOR_DELIVERY: "Out for delivery",
+      DELIVERED: "Delivered",
+      CANCELLED: "Cancelled",
+    }
+
+    let statusText = statusLabels[delivery.status] || delivery.status
+
+    deliveryUI = React.createElement(
+      "div",
+      { className: "bg-secondary/10 rounded p-4 mb-6 mt-6" },
+      React.createElement(
+        "h3",
+        { className: "text-xl font-medium text-secondary mb-3" },
+        "Delivery Tracking"
+      ),
+      React.createElement(
+        "p",
+        { className: "text-sm text-secondary mb-2" },
+        "TEST/DEMO DELIVERY TRACKING"
+      ),
+      React.createElement(
+        "div",
+        { className: "mb-3" },
+        React.createElement(
+          "p",
+          { className: "font-medium" },
+          "Status:"
+        ),
+        React.createElement(
+          "span",
+          { className: `text-${delivery.status.toLowerCase()} mb-1` },
+          statusText
+        )
+      )
+    )
+
+    if (delivery.status !== "DELIVERED" && delivery.status !== "CANCELLED") {
+      let trackingRow = null
+      if (delivery.trackingNumber !== undefined && delivery.trackingNumber !== null) {
+        trackingRow = React.createElement(
+          "div",
+          { className: "mb-2" },
+          React.createElement("strong", null, "Tracking Number:"),
+          ` ${delivery.trackingNumber}`
+        )
+      }
+      let partnerRow = null
+      if (delivery.deliveryPartner !== undefined && delivery.deliveryPartner !== null) {
+        partnerRow = React.createElement(
+          "div",
+          { className: "mb-2" },
+          React.createElement("strong", null, "Delivery Partner:"),
+          ` ${delivery.deliveryPartner}`
+        )
+      }
+      let estRow = null
+      if (delivery.estimatedDeliveryDate !== undefined && delivery.estimatedDeliveryDate !== null) {
+        const estDate = new Date(delivery.estimatedDeliveryDate).toLocaleDateString()
+        estRow = React.createElement(
+          "div",
+          { className: "mb-2" },
+          React.createElement("strong", null, "Estimated Delivery:"),
+          ` ${estDate}`
+        )
+      }
+      deliveryUI = React.createElement(
+        "div",
+        null,
+        trackingRow,
+        partnerRow,
+        estRow
+      )
+    }
+
+    if (delivery.status !== "DELIVERED" && delivery.status !== "CANCELLED") {
+      let timelineItems = []
+      for (const event of timeline) {
+        const eventDate = new Date(event.createdAt).toLocaleString()
+        timelineItems.push(React.createElement(
+          "li",
+          { key: event.id, className: "mb-1" },
+          React.createElement("span", { className: "text-secondary" }, event.title, ` • ${eventDate}`)
+        ))
+      }
+      deliveryUI = React.createElement(
+        "div",
+        null,
+        deliveryUI,
+        React.createElement(
+          "div",
+          { className: "mt-3 p-3 bg-secondary/5 rounded" },
+          React.createElement("p", { className: "text-xs text-secondary mb-1" }, "Timeline:"),
+          React.createElement(
+            "ul",
+            { className: "list-disc pl-3 text-secondary text-sm mt-1" },
+            timelineItems
+          )
+        )
+      )
+    }
+  }
 
   return React.createElement(
     "div",
@@ -261,6 +373,8 @@ function OrderDetailPage({ params }) {
                 "Payment unavailable. Only the buyer can pay for this order."
               ),
       ),
+
+      deliveryUI,
 
       React.createElement(
         "a",
