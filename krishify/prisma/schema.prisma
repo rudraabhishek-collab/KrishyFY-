@@ -70,3 +70,16 @@ model Bid {
   auction   Auction  @relation(fields: [auctionId], references: [id])
   buyer     User     @relation(fields: [buyerId], references: [id])
 }
+
+model Payment {
+  id               String     @id @default(uuid())
+  orderId          String     @unique
+  razorpayOrderId  String
+  razorpayPaymentId String
+  razorpaySignature String
+  amount           Decimal
+  currency         String     @default("INR")
+  status           String     @default("CREATED")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
