@@ -6,22 +6,33 @@ function OrderDetailPage({ params }) {
   const [loading, setLoading] = React.useState(true)
   const [payLoading, setPayLoading] = React.useState(false)
   const [error, setError] = React.useState(null)
-  const [user] = React.useState(() => {
-    try {
-      const sessionId = document.cookie.match(/krishify_session=([^;]+)/)
-      return sessionId ? { sessionId: sessionId[1] } : null
-    } catch {
-      return null
-    }
-  })
+  const [user, setUser] = React.useState(null)
+  const [paramsData, setParamsData] = React.useState({ id: params.id })
 
-  // Parse params from dynamic route
-  const path = window.location.pathname
-  const match = path.match(/^\/orders\/([^/]+)$/)
-  const paramsData = match ? { id: match[1] } : { id: params.id }
+  React.useEffect(() => {
+    const path = window.location.pathname
+    const match = path.match(/^\/orders\/([^/]+)$/)
+    setParamsData(match ? { id: match[1] } : { id: params.id })
+  }, [])
+
+  React.useEffect(() => {
+    async function loadUser() {
+      try {
+        const res = await fetch("/api/auth/me", {
+          headers: { "Content-Type": "application/json" },
+        })
+        const data = await res.json()
+        setUser(data)
+      } catch (e) {
+        setUser(null)
+      }
+    }
+    loadUser()
+  }, [])
 
   React.useEffect(() => {
     async function loadOrder() {
+      if (!paramsData.id) return
       try {
         const res = await fetch(`/api/orders/${paramsData.id}`, {
           headers: { "Content-Type": "application/json" },
@@ -39,7 +50,7 @@ function OrderDetailPage({ params }) {
       }
     }
     loadOrder()
-  }, [paramsData.id, user])
+  }, [paramsData.id])
 
   React.useEffect(() => {
     async function loadPayment() {
@@ -84,7 +95,7 @@ function OrderDetailPage({ params }) {
 
       const { razorpayOrderId, amount, currency, keyId } = data.payment
 
-      // Step 2: Open Razorpay Checkout
+      // Step 2: Open Razorpay Checkout (only in browser)
       const script = document.createElement("script")
       script.src = "https://checkout.razorpay.com/v1/checkout.js"
       script.onload = () => {
@@ -182,8 +193,8 @@ function OrderDetailPage({ params }) {
   }
 
   // Check authorization
-  const isBuyer = user.role === "buyer" && order.buyerId === user.sessionId
-  const isFarmer = user.role === "farmer" && order.farmerId === user.sessionId
+  const isBuyer = user?.role === "buyer" && order?.buyerId === user?.userId
+  const isFarmer = user?.role === "farmer" && order?.farmerId === user?.userId
 
   if (!isBuyer && !isFarmer) {
     return React.createElement(
@@ -200,7 +211,7 @@ function OrderDetailPage({ params }) {
 
   // Determine payment state
   const isPaid = payment?.status === "PAID"
-  const isPaymentEligible = !isPaid && user.role === "buyer"
+  const isPaymentEligible = !isPaid && user?.role === "buyer"
 
   return React.createElement(
     "div",
@@ -231,24 +242,24 @@ function OrderDetailPage({ params }) {
               React.createElement("br", null),
               `Razorpay Payment ID: ${payment?.razorpayPaymentId || "N/A"}`
             )
-            : isPaymentEligible
-              ? React.createElement(
-                  "button",
-                  {
-                    id: "payNowBtn",
-                    className: "mt-2 px-4 py-2 bg-primary text-white rounded",
-                    onClick: initiatePayment,
-                    disabled: payLoading,
-                  },
-                  payLoading
-                    ? "Processing payment..."
-                    : "Pay Now"
-                )
-              : React.createElement(
-                  "p",
-                  null,
-                  "Payment unavailable. Only the buyer can pay for this order."
-                ),
+          : isPaymentEligible
+            ? React.createElement(
+                "button",
+                {
+                  id: "payNowBtn",
+                  className: "mt-2 px-4 py-2 bg-primary text-white rounded",
+                  onClick: initiatePayment,
+                  disabled: payLoading,
+                },
+                payLoading
+                  ? "Processing payment..."
+                  : "Pay Now"
+              )
+            : React.createElement(
+                "p",
+                null,
+                "Payment unavailable. Only the buyer can pay for this order."
+              ),
       ),
 
       React.createElement(
@@ -263,8 +274,5 @@ function OrderDetailPage({ params }) {
   )
 }
 
-// Simple params parser for Next.js dynamic route
-const match = window.location.pathname.match(/^\/orders\/([^/]+)$/)
-const params = match ? { id: match[1] } : {}
-
+// params parsed in useEffect, no top-level window access
 module.exports = OrderDetailPage
