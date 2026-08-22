@@ -20,14 +20,14 @@ module.exports = async function handler(req, res) {
   const connection = await pool.getConnection()
 
   try {
-    // Recent activity
-    const [recentActivity] = await connection.execute(
-      "SELECT id, userId, action, model, referenceId, createdAt FROM ActivityLog ORDER BY createdAt DESC LIMIT 20"
-    )
-
-    // System notifications
+    // System notifications (from Notification table)
     const [notifications] = await connection.execute(
       "SELECT id, type, title, message, createdAt, read FROM Notification ORDER BY createdAt DESC LIMIT 10"
+    )
+
+    // Recent activity from various entities
+    const [recentActivity] = await connection.execute(
+      "SELECT id, userId, action, relatedEntityType, relatedEntityId, createdAt FROM Notification WHERE read = false ORDER BY createdAt DESC LIMIT 20"
     )
 
     // Return activity and notifications
