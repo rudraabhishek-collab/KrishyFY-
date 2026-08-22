@@ -11,10 +11,11 @@ exports.default = async function handler(req, res) {
       return res.status(400).json({ error: "Name, email, and password are required" })
     }
 
-    // Validate role
-    const validRoles = ["farmer", "buyer", "admin"]
+    // Validate role - only farmer and buyer allowed during public registration
+    // Admin role can only be provisioned manually by existing admins
+    const validRoles = ["farmer", "buyer"]
     if (role && !validRoles.includes(role)) {
-      return res.status(400).json({ error: "Invalid role" })
+      return res.status(400).json({ error: "Invalid role. Admin role must be provisioned manually." })
     }
 
     const pool = mysql.createPool({
@@ -44,17 +45,17 @@ exports.default = async function handler(req, res) {
       const saltRounds = 10
       const hashedPassword = await bcrypt.hash(password, saltRounds)
 
-      // Create user
+      // Create user with role from request or default to farmer
+      const userRole = role || "farmer"
+
       const [result] = await connection.execute(
         "INSERT INTO User (id, name, email, password, role, createdAt) VALUES (UUID(), ?, ?, ?, ?, NOW())",
-        [name, email, hashedPassword, role || "farmer"]
+        [name, email, hashedPassword, userRole]
       )
-
-      const userId = result.insertId
 
       const [users] = await connection.execute(
         "SELECT id, name, email, role FROM User WHERE id = ?",
-        [userId]
+        [result.insertId]
       )
 
       return res.status(201).json({

@@ -1,0 +1,45 @@
+const mysql = require("mysql2/promise")
+
+module.exports = async function handler(req, res) {
+  // Admin authorization
+  const sessionId = req.cookies?.krishify_session
+  if (!sessionId) {
+    return res.status(401).json({ error: "Unauthenticated" })
+  }
+
+  const pool = mysql.createPool({
+    host: "localhost",
+    user: "root",
+    password: "ROOT",
+    database: "krishify",
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+  })
+
+  const connection = await pool.getConnection()
+
+  try {
+    // Recent activity
+    const [recentActivity] = await connection.execute(
+      "SELECT id, userId, action, model, referenceId, createdAt FROM ActivityLog ORDER BY createdAt DESC LIMIT 20"
+    )
+
+    // System notifications
+    const [notifications] = await connection.execute(
+      "SELECT id, type, title, message, createdAt, read FROM Notification ORDER BY createdAt DESC LIMIT 10"
+    )
+
+    // Return activity and notifications
+    return res.status(200).json({
+      success: true,
+      activity: recentActivity,
+      notifications,
+    })
+  } catch (error) {
+    console.error("Admin notifications error:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  } finally {
+    await connection.end()
+  }
+}

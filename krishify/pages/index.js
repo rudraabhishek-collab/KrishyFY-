@@ -27,6 +27,9 @@ function HomePage() {
         ),
         React.createElement('li', null,
           React.createElement('a', { href: '#about', className: 'color-primary hover:underline' }, 'About')
+        ),
+        React.createElement('li', null,
+          React.createElement('a', { href: '/admin', className: 'color-primary hover:underline' }, 'Admin')
         )
       ),
       React.createElement(
