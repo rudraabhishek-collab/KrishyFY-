@@ -38,8 +38,15 @@ module.exports = async function handler(req, res) {
     const conn = await pool.getConnection()
     try {
       // Verify crop ownership
-      const [crops] = await conn.execute('SELECT id FROM CropListing WHERE id = ? AND farmerId = ?', [cropListingId, user.userId])
+      const [crops] = await conn.execute('SELECT id, lotStatus, inspectionStatus FROM CropListing WHERE id = ? AND farmerId = ?', [cropListingId, user.userId])
       if (crops.length === 0) return res.status(403).json({ error: 'Crop not found or not yours' })
+
+      const crop = crops[0]
+
+      // Physical inspection must be APPROVED before AI assessment
+      if (crop.inspectionStatus !== 'APPROVED') {
+        return res.status(409).json({ error: 'Physical inspection must be approved before AI assessment. Lot status: ' + crop.lotStatus })
+      }
 
       // Check for in-progress assessment
       const [processing] = await conn.execute("SELECT id FROM CropQualityAssessment WHERE cropListingId = ? AND status = 'PROCESSING'", [cropListingId])
@@ -71,3 +78,5 @@ module.exports = async function handler(req, res) {
   }
 }
 module.exports.default = module.exports
+
+if (typeof module.exports === "function") { module.exports.default = module.exports; }

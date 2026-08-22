@@ -48,28 +48,47 @@ async function createBidHandler(req, res) {
   }
 
   const body = req.body || {}
-  const { auctionId, amount } = body
+  const { cropListingId, bidPricePerQuintal } = body
 
-  if (!auctionId) {
-    return res.status(400).json({ error: "Auction ID is required" })
+  if (!cropListingId) {
+    return res.status(400).json({ error: "Crop listing ID is required" })
   }
-  if (!amount || isNaN(amount) || Number(amount) <= 0) {
-    return res.status(400).json({ error: "Valid amount is required" })
+  if (!bidPricePerQuintal || isNaN(bidPricePerQuintal) || Number(bidPricePerQuintal) <= 0) {
+    return res.status(400).json({ error: "Valid bid price per quintal is required" })
   }
 
   const connection = await pool.getConnection()
   try {
-    // Verify auction exists and is ACTIVE
+    // Verify crop listing exists and check lot status
+    const [cropListings] = await connection.execute(
+      "SELECT id, farmerId, cropName, quantityKg, lotStatus, inspectionStatus, expectedPricePerQuintal FROM CropListing WHERE id = ?",
+      [cropListingId]
+    )
+
+    if (cropListings.length === 0) {
+      return res.status(404).json({ error: "Crop listing not found" })
+    }
+
+    const crop = cropListings[0]
+
+    // Only AUCTION_READY or AUCTION_ACTIVE lots can be bid on
+    if (crop.lotStatus !== 'AUCTION_READY' && crop.lotStatus !== 'AUCTION_ACTIVE') {
+      return res.status(400).json({ error: 'Lot is not in auction state. Current status: ' + crop.lotStatus })
+    }
+
+    // Buyer cannot bid on own crop
+    if (crop.farmerId === user.userId) {
+      return res.status(400).json({ error: "Cannot bid on your own crop" })
+    }
+
+    // Check auction exists and is active for this crop listing
     const [auctions] = await connection.execute(
-      `SELECT a.*, cl.farmerId, cl.cropName
-       FROM Auction a
-       JOIN CropListing cl ON a.cropListingId = cl.id
-       WHERE a.id = ? AND a.status = 'ACTIVE'`,
-      [auctionId]
+      "SELECT id, status, startsAt, endsAt FROM Auction WHERE cropListingId = ? AND status = 'ACTIVE'",
+      [cropListingId]
     )
 
     if (auctions.length === 0) {
-      return res.status(404).json({ error: "Auction not found or not active" })
+      return res.status(404).json({ error: "No active auction for this crop listing" })
     }
 
     const auction = auctions[0]
@@ -80,42 +99,40 @@ async function createBidHandler(req, res) {
       return res.status(400).json({ error: "Auction is not currently active" })
     }
 
-    // Buyer cannot bid on own crop
-    if (auction.farmerId === user.userId) {
-      return res.status(400).json({ error: "Cannot bid on your own crop" })
-    }
-
     // Get current highest bid
     const [currentBids] = await connection.execute(
       "SELECT amount, buyerId FROM Bid WHERE auctionId = ? ORDER BY amount DESC LIMIT 1",
-      [auctionId]
+      [auction.id]
     )
 
-    const currentHighest = currentBids.length > 0 ? Number(currentBids[0].amount) : Number(auction.startingPrice)
-    const minimumValidBid = currentHighest + Number(auction.minimumIncrement)
+    const currentHighest = currentBids.length > 0 ? Number(currentBids[0].amount) : Number(crop.expectedPricePerQuintal || 0)
+    const minimumValidBid = currentHighest + Number(crop.minimumIncrement || 25)
 
-    if (Number(amount) < minimumValidBid) {
+    if (Number(bidPricePerQuintal) < minimumValidBid) {
       return res.status(400).json({
-        error: `Bid must be at least ₹${minimumValidBid} (current: ₹${currentHighest} + increment ₹${auction.minimumIncrement})`,
+        error: `Bid must be at least ₹${minimumValidBid}/quintal (current: ₹${currentHighest}/quintal + increment ₹${crop.minimumIncrement || 25}/quintal)`,
       })
     }
 
-    const isNewHighest = Number(amount) >= minimumValidBid
+    const isNewHighest = Number(bidPricePerQuintal) >= minimumValidBid
 
-    // Create bid
+    // Calculate total value server-side: quantityKg / 100 × bidPricePerQuintal
+    const totalValue = Math.round((crop.quantityKg / 100) * Number(bidPricePerQuintal))
+
+    // Create bid with bidPricePerQuintal
     const bidId = require("crypto").randomUUID()
     await connection.execute(
       "INSERT INTO Bid (id, auctionId, buyerId, amount, createdAt) VALUES (?, ?, ?, ?, NOW())",
-      [bidId, auctionId, user.userId, amount]
+      [bidId, auction.id, user.userId, bidPricePerQuintal]
     )
 
     // Notify farmer about new bid
     try {
       await createNotification({
-        userId: auction.farmerId,
+        userId: crop.farmerId,
         type: "NEW_BID",
         title: "New bid received",
-        message: `A new bid of ₹${amount} has been placed on your crop ${auction.cropName}.`,
+        message: `A new bid of ₹${bidPricePerQuintal}/q has been placed on your ${crop.cropName} lot (${crop.quantityKg}kg / ${crop.quantityKg/100}q). Total: ₹${totalValue}`,
         relatedEntityType: "auction",
         relatedEntityId: auction.id,
       })
@@ -130,7 +147,7 @@ async function createBidHandler(req, res) {
           userId: currentBids[0].buyerId,
           type: "OUTBID",
           title: "You have been outbid",
-          message: `Another buyer placed a higher bid of ₹${amount} on ${auction.cropName}.`,
+          message: `Another buyer placed a higher bid of ₹${bidPricePerQuintal}/q on ${crop.cropName}. Total lot value: ₹${totalValue}`,
           relatedEntityType: "auction",
           relatedEntityId: auction.id,
         })
@@ -141,7 +158,7 @@ async function createBidHandler(req, res) {
 
     return res.status(201).json({
       success: true,
-      bid: { id: bidId, auctionId, buyerId: user.userId, amount, isNewHighest },
+      bid: { id: bidId, auctionId: auction.id, buyerId: user.userId, bidPricePerQuintal, totalValue, isNewHighest },
     })
   } finally {
     connection.release()
@@ -160,21 +177,9 @@ async function getBidsHandler(req, res) {
   const connection = await pool.getConnection()
 
   try {
-    if (auctionId) {
-      const [auctionChecks] = await connection.execute(
-        "SELECT a.id, cl.farmerId FROM Auction a JOIN CropListing cl ON a.cropListingId = cl.id WHERE a.id = ?",
-        [auctionId]
-      )
+    let query = `SELECT b.id, b.amount AS bidPricePerQuintal, b.createdAt, b.auctionId, u.name AS buyerName, cl.cropName, cl.quantityKg, cl.lotStatus `+
+      `FROM Bid b JOIN User u ON b.buyerId = u.id JOIN CropListing cl ON b.auctionId = cl.id `
 
-      if (auctionChecks.length === 0) {
-        return res.status(404).json({ error: "Auction not found" })
-      }
-    }
-
-    let query = `SELECT b.id, b.amount, b.createdAt, b.auctionId,
-                        u.name AS buyerName
-                 FROM Bid b
-                 JOIN User u ON b.buyerId = u.id`
     let params = []
 
     if (auctionId) {
@@ -193,3 +198,5 @@ async function getBidsHandler(req, res) {
 }
 
 if (typeof module.exports === "function") { module.exports.default = module.exports; }
+
+if (typeof module.exports === "object") { module.exports = { default: module.exports }; }
