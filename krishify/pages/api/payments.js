@@ -97,7 +97,12 @@ async function createOrderHandler(req, res) {
       }
 
       // Verify the order is eligible for payment (not already paid)
-      if (order.status === "PAID" || order.paymentStatus === "PAID") {
+      const [existingPaidPayments] = await connection.execute(
+        "SELECT * FROM Payment WHERE orderId = ? AND status = 'PAID'",
+        [orderId]
+      )
+
+      if (existingPaidPayments.length > 0) {
         return res.status(400).json({ error: "This order has already been paid" })
       }
 
@@ -275,12 +280,6 @@ async function verifyPaymentHandler(req, res) {
       await connection.execute(
         "UPDATE Payment SET razorpayPaymentId = ?, razorpaySignature = ?, status = 'PAID', updatedAt = NOW() WHERE id = ?",
         [razorpayPaymentId, razorpaySignature, payment.id]
-      )
-
-      // Update the order payment state
-      await connection.execute(
-        "UPDATE \`Order\` SET status = 'PAID', updatedAt = NOW() WHERE id = ?",
-        [orderId]
       )
 
       // Return success state
