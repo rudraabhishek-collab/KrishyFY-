@@ -1,23 +1,5 @@
 const mysql = require("mysql2/promise")
-
-module.exports = async function handler(req, res) {
-  try {
-    // Method-based routing
-    if (req.method === "POST") {
-      return createBidHandler(req, res)
-    }
-    if (req.method === "GET") {
-      return getBidsHandler(req, res)
-    }
-    if (req.method === "POST" && req.path?.includes("/convert")) {
-      return convertAuctionWinnerHandler(req, res)
-    }
-    return res.status(405).json({ error: "Method not allowed" })
-  } catch (error) {
-    console.error("Bids API error:", error)
-    return res.status(500).json({ error: "Internal server error" })
-  }
-}
+const { createNotification } = require("../../lib/notifications")
 
 async function createBidHandler(req, res) {
   try {
@@ -115,7 +97,54 @@ async function createBidHandler(req, res) {
         [auctionId, user.userId, amount]
       )
 
-      const isNewHighest = amount > currentHighest
+      // Notify the farmer about the new bid
+      const farmerType = "NEW_BID"
+      const farmerTitle = "New bid received"
+      const farmerMessage = `A new bid of ₹${amount} has been placed on your auction for ${auction.cropName}.`
+
+      await createNotification({
+        userId: auction.farmerId,
+        type: farmerType,
+        title: farmerTitle,
+        message: farmerMessage,
+        relatedEntityType: "auction",
+        relatedEntityId: auction.id,
+      })
+
+      // If this bid made someone no longer the highest bidder, notify them
+      if (isNewHighest && currentBids.length > 0) {
+        // Find the previous highest bidder
+        const [prevBidder] = await connection.execute(
+          "SELECT buyerId, amount FROM Bid WHERE auctionId = ? ORDER BY amount DESC LIMIT 1 OFFSET 1",
+          [auctionId]
+        )
+
+        if (prevBidder.length > 0) {
+          const previousBidderId = prevBidder[0].buyerId
+          // Only notify if the previous bidder is not the farmer and not the current bidder
+          if (previousBidderId !== auction.farmerId && previousBidderId !== user.userId) {
+            // Check if a notification already exists for this
+            const [existing] = await connection.execute(
+              "SELECT id FROM Notification WHERE userId = ? AND type = 'OUTBID' AND relatedEntityId = ? AND read = false",
+              [previousBidderId, auction.id]
+            )
+
+            if (existing.length === 0) {
+              const prevBidderTitle = "You have been outbid"
+              const prevBidderMessage = `Another buyer has placed a higher bid of ₹${amount} on ${auction.cropName}.`
+
+              await createNotification({
+                userId: previousBidderId,
+                type: "OUTBID",
+                title: prevBidderTitle,
+                message: prevBidderMessage,
+                relatedEntityType: "auction",
+                relatedEntityId: auction.id,
+              })
+            }
+          }
+        }
+      }
 
       return res.status(201).json({
         success: true,
