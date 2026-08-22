@@ -10,6 +10,17 @@ const pool = mysql.createPool({
   queueLimit: 0,
 })
 
+module.exports = async function handler(req, res) {
+  try {
+    if (req.method === "POST") return createOrderHandler(req, res)
+    if (req.method === "GET") return listOrdersHandler(req, res)
+    return res.status(405).json({ error: "Method not allowed" })
+  } catch (error) {
+    console.error("Orders API error:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+}
+
 async function getSession(sessionId) {
   if (!sessionId) return null
   const connection = await pool.getConnection()
@@ -21,17 +32,6 @@ async function getSession(sessionId) {
     return sessions.length > 0 ? sessions[0] : null
   } finally {
     connection.release()
-  }
-}
-
-module.exports = async function handler(req, res) {
-  try {
-    if (req.method === "POST") return createOrderHandler(req, res)
-    if (req.method === "GET") return listOrdersHandler(req, res)
-    return res.status(405).json({ error: "Method not allowed" })
-  } catch (error) {
-    console.error("Orders API error:", error)
-    return res.status(500).json({ error: "Internal server error" })
   }
 }
 
@@ -52,14 +52,11 @@ async function createOrderHandler(req, res) {
   if (!cropListingId) {
     return res.status(400).json({ error: "Crop listing ID is required" })
   }
-  if (!quantity || isNaN(quantity) || parseInt(quantity) <= 0) {
-    return res.status(400).json({ error: "Valid quantity is required" })
-  }
 
   const connection = await pool.getConnection()
   try {
     const [listings] = await connection.execute(
-      "SELECT id, farmerId, cropName, quantity AS listedQuantity, unit, expectedPrice, status FROM CropListing WHERE id = ?",
+      "SELECT id, farmerId, cropName, quantityKg, quantity, unit, expectedPrice, expectedPricePerQuintal, lotStatus, inspectionStatus, aiAssessmentStatus FROM CropListing WHERE id = ?",
       [cropListingId]
     )
 
@@ -69,26 +66,48 @@ async function createOrderHandler(req, res) {
 
     const crop = listings[0]
 
-    if (crop.status !== "ACTIVE") {
-      return res.status(400).json({ error: "Crop is not available for purchase" })
+    // Only ACTIVE lots with approved inspection can be ordered
+    if (crop.lotStatus !== 'ACTIVE') {
+      return res.status(400).json({ error: 'Lot is not active for purchase. Current status: ' + crop.lotStatus })
     }
 
     if (crop.farmerId === user.userId) {
       return res.status(400).json({ error: "Cannot purchase your own crop" })
     }
 
-    const requestedQty = parseInt(quantity)
-    const listedQty = parseInt(crop.listedQuantity)
-    if (requestedQty > listedQty) {
-      return res.status(400).json({ error: "Requested quantity exceeds available quantity" })
+    // Physical inspection must be APPROVED before ordering
+    if (crop.inspectionStatus !== 'APPROVED') {
+      return res.status(409).json({ error: 'Physical inspection must be approved before order. Current status: ' + crop.inspectionStatus })
     }
 
-    if (crop.expectedPrice === null || crop.expectedPrice === undefined) {
+    // Whole-lot enforcement: order quantity must be the full lot
+    const lotQuantityKg = crop.quantityKg || 0
+    const requestedQty = quantity !== undefined ? parseInt(quantity) : lotQuantityKg
+
+    if (requestedQty <= 0) {
+      return res.status(400).json({ error: "Valid quantity is required" })
+    }
+
+    if (requestedQty > lotQuantityKg) {
+      return res.status(400).json({ error: "Requested quantity exceeds available lot quantity" })
+    }
+
+    // Use expectedPricePerQuintal if available (Digital Mandi pricing)
+    // Otherwise fall back to expectedPrice per unit
+    let pricePerUnit, totalAmount
+
+    if (crop.expectedPricePerQuintal !== null && crop.expectedPricePerQuintal !== undefined) {
+      // Digital Mandi: price is ₹/quintal, calculate total server-side
+      const quintals = lotQuantityKg / 100
+      pricePerUnit = Number(crop.expectedPricePerQuintal)
+      totalAmount = Math.round(quintals * pricePerUnit)
+    } else if (crop.expectedPrice !== null && crop.expectedPrice !== undefined) {
+      // Legacy pricing: price per unit
+      pricePerUnit = Number(crop.expectedPrice)
+      totalAmount = pricePerUnit * requestedQty
+    } else {
       return res.status(400).json({ error: "Price not available for this crop" })
     }
-
-    const pricePerUnit = Number(crop.expectedPrice)
-    const totalAmount = pricePerUnit * requestedQty
 
     const orderId = require("crypto").randomUUID()
     await connection.execute(
@@ -96,8 +115,8 @@ async function createOrderHandler(req, res) {
       [orderId, cropListingId, user.userId, crop.farmerId, String(requestedQty), crop.unit, pricePerUnit, totalAmount]
     )
 
-    // Mark as SOLD if fully purchased
-    if (requestedQty >= listedQty) {
+    // Mark as SOLD if fully purchased (requestedQty equals lot quantity)
+    if (requestedQty >= lotQuantityKg) {
       await connection.execute(
         "UPDATE CropListing SET status = 'SOLD' WHERE id = ?",
         [cropListingId]
@@ -113,6 +132,21 @@ async function createOrderHandler(req, res) {
        WHERE o.id = ?`,
       [orderId]
     )
+
+    // Notify farmer about order
+    try {
+      const { createNotification } = require("../../lib/notifications")
+      await createNotification({
+        userId: crop.farmerId,
+        type: "ORDER_PLACED",
+        title: "New order received",
+        message: `₹${totalAmount.toLocaleString('en-IN')} order placed for ${crop.cropName} lot (${lotQuantityKg}kg / ${quintals}q). Buyer: ${user.name || 'Buyer'}`,
+        relatedEntityType: "order",
+        relatedEntityId: orderId,
+      })
+    } catch (notifErr) {
+      console.error("Notification error:", notifErr)
+    }
 
     return res.status(201).json({ success: true, order: orders[0] })
   } finally {
@@ -169,3 +203,4 @@ async function listOrdersHandler(req, res) {
 }
 
 if (typeof module.exports === "function") { module.exports.default = module.exports; }
+
