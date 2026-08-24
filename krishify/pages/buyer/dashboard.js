@@ -20,7 +20,7 @@ function BuyerDashboardPage() {
       fetch('/api/orders', { credentials: 'include' }).then(r => r.json()),
       fetch('/api/notifications', { credentials: 'include' }).then(r => r.json()),
     ]).then(([me, ordersData, notifData]) => {
-      if (!me.authenticated) { window.location.href = '/login'; return }
+      if (!me.authenticated) { setLoading(false); return }
       if (me.user.role !== 'buyer') { window.location.href = '/'; return }
       setUser(me.user)
       if (ordersData.success) setOrders(ordersData.orders || [])

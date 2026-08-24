@@ -138,10 +138,13 @@ function MarketplacePage() {
       // Error
       error && React.createElement('div', { style: { marginBottom: '20px' } }, error),
       // Empty
-      !loading && !error && listings.length === 0 && React.createElement('div', { style: { textAlign: 'center' } },
-        React.createElement('div', { style: { margin: '20px auto' } }),
-        React.createElement('h3', null, 'No lots found'),
-        React.createElement('p', null, 'Try adjusting your search or check back later.')
+      !loading && !error && listings.length === 0 && React.createElement('div', { style: { textAlign: 'center', padding: '80px 20px' } },
+        React.createElement('div', { style: { width: '120px', height: '120px', margin: '0 auto 24px', background: 'linear-gradient(135deg, #f0fdf4, #bbf7d0)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, React.createElement('div', { style: { fontSize: '48px' } }, '🌾') ),
+        React.createElement('h3', { style: { fontSize: '20px', fontWeight: '800', color: '#111827', marginBottom: '16px' } }, 'No lots found'),
+        React.createElement('p', { style: { color: '#6b7280', fontSize: '15px', lineHeight: '1.6', marginBottom: '24px' } }, 'Your crops haven\'t appeared on the marketplace yet. List your first produce to get started!'),
+        React.createElement('div', { style: { display: 'flex', gap: '12px', justifyContent: 'center' } },
+          React.createElement('a', { href: '/farmer/crops/new', style: { display: 'inline-block', background: '#166534', color: '#fff', borderRadius: '10px', padding: '12px 24px', fontWeight: '700', fontSize: '14px', textDecoration: 'none' } }, '🚀 List Your First Crop')
+        )
       ),
       // Grid
       !loading && listings.length > 0 && React.createElement('div', { style: { display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' } },

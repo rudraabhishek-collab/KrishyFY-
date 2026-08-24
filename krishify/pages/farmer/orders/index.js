@@ -15,7 +15,6 @@ function FarmerOrdersPage() {
       .then(r => r.json())
       .then(data => {
         if (data.success) setOrders(data.orders || [])
-        else if (data.error?.includes('Unauthenticated')) window.location.href = '/login'
         else setError(data.error || 'Failed to load')
         setLoading(false)
       }).catch(() => { setError('Network error'); setLoading(false) })

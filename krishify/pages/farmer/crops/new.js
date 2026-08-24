@@ -4,7 +4,7 @@ const CATEGORIES = ['Vegetables', 'Fruits', 'Grains', 'Pulses', 'Spices', 'Oilse
 
 function NewCropPage() {
   // Whole-lot: quantity in kg for the entire lot (e.g., 5000 for 50 quintals)
-  const [form, setForm] = React.useState({ cropName: '', category: 'Vegetables', description: '', quantity: '5000', location: '', harvestDate: '' })
+  const [form, setForm] = React.useState({ cropName: '', category: 'Vegetables', description: '', quantity: '5000', unit: 'kg', location: 'Nashik, MH', harvestDate: '' })
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
   const [success, setSuccess] = React.useState('')
@@ -14,7 +14,7 @@ function NewCropPage() {
   function handleSubmit(e) {
     e.preventDefault()
     setError(''); setSuccess('')
-    if (!form.cropName || !form.quantity || !form.location) { setError('Please fill all required fields.'); return }
+    if (!form.cropName || !form.category || !form.quantity || !form.location) { setError('cropName, category, quantity, unit, and location are required.'); return }
     setLoading(true)
     fetch('/api/crops', {
       method: 'POST',
@@ -56,8 +56,17 @@ function NewCropPage() {
           field('Description', React.createElement('textarea', { className: 'input-field', rows: 3, placeholder: 'Describe the crop quality, variety, growing conditions...', value: form.description, onChange: e => set('description', e.target.value), style: { resize: 'vertical' } })),
           field('Lot Quantity (kg)', React.createElement('input', { type: 'number', className: 'input-field', placeholder: 'e.g. 5000', min: '100', value: form.quantity, onChange: e => set('quantity', e.target.value), required: true }),
             React.createElement('p', { style: { fontSize: '12px', color: '#6b7280', marginTop: '4px' } }, 'Enter total lot quantity in kilograms. Example: 5000 kg = 50 quintals.')),
+          field('Unit', React.createElement('select', { className: 'input-field', value: form.unit, onChange: e => set('unit', e.target.value) },
+            React.createElement('option', { key: 'kg', value: 'kg' }, 'kg'),
+            React.createElement('option', { key: 'quintal', value: 'quintal' }, 'quintal'),
+            React.createElement('option', { key: 'ton', value: 'ton' }, 'ton')
+          ), true),
+
           field('Expected Price (₹ per quintal)', React.createElement('input', { type: 'number', className: 'input-field', placeholder: 'e.g. 2500', min: '0', step: '0.01', value: form.expectedPrice, onChange: e => set('expectedPrice', e.target.value) }),
             React.createElement('p', { style: { fontSize: '12px', color: '#6b7280', marginTop: '4px' } }, 'Price per quintal for the whole lot. Leave blank if negotiable.')),
+
+          field('Location', React.createElement('input', { type: 'text', className: 'input-field', placeholder: 'e.g. Nashik, MH', value: form.location, onChange: e => set('location', e.target.value), required: true }),
+            React.createElement('p', { style: { fontSize: '12px', color: '#6b7280', marginTop: '4px' } }, 'Enter your city and state.')),
 
           React.createElement('div', { style: { display: 'flex', gap: '12px', marginTop: '8px' } },
             React.createElement('button', { type: 'submit', className: 'btn-primary', style: { flex: 1, padding: '12px', fontSize: '15px' }, disabled: loading }, loading ? 'Creating lot...' : '🌾 List My Lot'),

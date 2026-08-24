@@ -15,9 +15,10 @@ function Navbar() {
       .catch(() => setLoading(false))
   }, [])
 
-  function logout() {
+  function handleLogout() {
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-      .finally(() => { window.location.href = '/login' })
+      .then(() => { window.location.href = '/login' })
+      .catch(() => { window.location.href = '/login' })
   }
 
   const linkStyle = { color: '#166534', textDecoration: 'none', fontWeight: '500', fontSize: '14px', padding: '6px 10px', borderRadius: '6px', transition: 'background 0.15s' }
@@ -32,9 +33,7 @@ function Navbar() {
     }, children)
   }
 
-  function renderLinks() {
-    if (loading) return null
-
+  function renderDesktopLinks() {
     if (!user) {
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
         React.createElement(NavLink, { href: '/' }, 'Home'),
@@ -47,6 +46,8 @@ function Navbar() {
       )
     }
 
+    const userName = user.name ? user.name.split(' ')[0] : 'User'
+
     if (user.role === 'buyer') {
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
         React.createElement(NavLink, { href: '/' }, 'Home'),
@@ -54,8 +55,8 @@ function Navbar() {
         React.createElement(NavLink, { href: '/auctions' }, 'Auctions'),
         React.createElement(NavLink, { href: '/orders' }, 'My Orders'),
         React.createElement(NavLink, { href: '/notifications' }, '🔔 Notifications'),
-        React.createElement('span', { style: { marginLeft: '8px', fontSize: '13px', color: '#555' } }, `Hi, ${user.name.split(' ')[0]}`),
-        React.createElement('button', { onClick: logout, style: outlineBtnStyle }, 'Logout')
+        React.createElement('span', { style: { marginLeft: '8px', fontSize: '13px', color: '#555' } }, `Hi, ${userName}`),
+        React.createElement('button', { onClick: handleLogout, style: outlineBtnStyle }, 'Logout')
       )
     }
 
@@ -63,14 +64,14 @@ function Navbar() {
       return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
         React.createElement(NavLink, { href: '/' }, 'Home'),
         React.createElement(NavLink, { href: '/farmer' }, 'Dashboard'),
-        React.createElement(NavLink, { href: '/farmer/crops' }, 'My Crops'),
-        React.createElement(NavLink, { href: '/farmer/crops/new' }, '+ New Crop'),
+        React.createElement(NavLink, { href: '/farmer/crops' }, 'My Lots'),
+        React.createElement(NavLink, { href: '/farmer/crops/new' }, '+ New Lot'),
         React.createElement(NavLink, { href: '/farmer/bids' }, 'Auctions'),
         React.createElement(NavLink, { href: '/farmer/orders' }, 'Orders'),
         React.createElement(NavLink, { href: '/farmer/delivery' }, 'Delivery'),
         React.createElement(NavLink, { href: '/notifications' }, '🔔 Notifications'),
-        React.createElement('span', { style: { marginLeft: '8px', fontSize: '13px', color: '#555' } }, `Hi, ${user.name.split(' ')[0]}`),
-        React.createElement('button', { onClick: logout, style: outlineBtnStyle }, 'Logout')
+        React.createElement('span', { style: { marginLeft: '8px', fontSize: '13px', color: '#555' } }, `Hi, ${userName}`),
+        React.createElement('button', { onClick: handleLogout, style: outlineBtnStyle }, 'Logout')
       )
     }
 
@@ -83,11 +84,18 @@ function Navbar() {
         React.createElement(NavLink, { href: '/admin/orders' }, 'Orders'),
         React.createElement(NavLink, { href: '/admin/delivery' }, 'Deliveries'),
         React.createElement(NavLink, { href: '/admin/reviews' }, 'Reviews'),
-        React.createElement('button', { onClick: logout, style: outlineBtnStyle }, 'Logout')
+        React.createElement('button', { onClick: handleLogout, style: outlineBtnStyle }, 'Logout')
       )
     }
 
-    return null
+    // Fallback if role is unknown but authenticated
+    return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } },
+      React.createElement(NavLink, { href: '/' }, 'Home'),
+      React.createElement(NavLink, { href: '/marketplace' }, 'Marketplace'),
+      React.createElement(NavLink, { href: '/auctions' }, 'Auctions'),
+      React.createElement('span', { style: { marginLeft: '8px', fontSize: '13px', color: '#555' } }, `Hi, ${userName}`),
+      React.createElement('button', { onClick: handleLogout, style: outlineBtnStyle }, 'Logout')
+    )
   }
 
   function renderMobileLinks() {
@@ -117,20 +125,20 @@ function Navbar() {
       addLink('/notifications', '🔔 Notifications')
       items.push(React.createElement('button', {
         key: 'logout',
-        onClick: logout,
+        onClick: () => { handleLogout(); setMenuOpen(false) },
         style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500' }
       }, 'Logout'))
     } else if (user.role === 'farmer') {
       addLink('/', 'Home')
-      addLink('/farmer/crops', 'My Crops')
-      addLink('/farmer/crops/new', '+ New Crop')
+      addLink('/farmer/crops', 'My Lots')
+      addLink('/farmer/crops/new', '+ New Lot')
       addLink('/farmer/bids', 'Bids')
       addLink('/farmer/orders', 'Orders')
       addLink('/farmer/delivery', 'Delivery')
       addLink('/notifications', '🔔 Notifications')
       items.push(React.createElement('button', {
         key: 'logout',
-        onClick: logout,
+        onClick: () => { handleLogout(); setMenuOpen(false) },
         style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500' }
       }, 'Logout'))
     } else if (user.role === 'admin') {
@@ -143,7 +151,7 @@ function Navbar() {
       addLink('/admin/reviews', 'Reviews')
       items.push(React.createElement('button', {
         key: 'logout',
-        onClick: logout,
+        onClick: () => { handleLogout(); setMenuOpen(false) },
         style: { display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500' }
       }, 'Logout'))
     }
@@ -157,7 +165,7 @@ function Navbar() {
     style: { background: '#fff', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }
   },
     React.createElement('div', {
-      style: { maxWidth: '1200px', margin: '0 auto', padding: '0 20px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }
+      style: { maxWidth: '1200x', margin: '0 auto', padding: '0 20px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }
     },
       // Logo
       React.createElement('a', {
@@ -172,12 +180,11 @@ function Navbar() {
       React.createElement('div', {
         style: { display: 'flex', alignItems: 'center', gap: '4px' },
         className: 'hidden-mobile'
-      }, renderLinks()),
+      }, renderDesktopLinks()),
       // Mobile hamburger
       React.createElement('button', {
         onClick: () => setMenuOpen(!menuOpen),
-        style: { background: 'none', border: 'none', cursor: 'pointer', padding: '8px', display: 'none' },
-        className: 'mobile-hamburger',
+        style: { background: 'none', border: 'none', cursor: 'pointer', padding: '8px', display: 'block' },
         'aria-label': 'Toggle menu'
       },
         React.createElement('span', { style: { display: 'block', width: '22px', height: '2px', background: '#166534', marginBottom: '5px', transition: 'all 0.2s' } }),
