@@ -1,15 +1,7 @@
-const mysql = require("mysql2/promise")
+const { getPool } = require('../../lib/db')
 const { createNotification } = require("../../lib/notifications")
 
-const pool = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "ROOT",
-  database: "krishify",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-})
+const pool = getPool()
 
 module.exports = async function handler(req, res) {
   try {

@@ -1,5 +1,4 @@
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('../../../lib/db')
 module.exports = async function handler(req, res) {
   try {
     // Authenticate session
@@ -9,15 +8,7 @@ module.exports = async function handler(req, res) {
     }
 
     // Verify session
-    const pool = mysql.createPool({
-      host: "localhost",
-      user: "root",
-      password: "ROOT",
-      database: "krishify",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
+    const pool = getPool()
 
     const connection = await pool.getConnection()
 

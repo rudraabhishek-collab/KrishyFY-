@@ -1,15 +1,6 @@
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('./db')
 const getConnection = () =>
-  mysql.createPool({
-    host: "localhost",
-    user: "root",
-    password: "ROOT",
-    database: "krishify",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  })
+  getPool()
 
 // Create a new notification for a user
 async function createNotification({ userId, type, title, message, relatedEntityType, relatedEntityId }) {

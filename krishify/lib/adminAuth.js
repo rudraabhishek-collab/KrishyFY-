@@ -1,5 +1,4 @@
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('./db')
 /**
  * Admin authorization helper
  * Verifies that the authenticated user has ADMIN role.
@@ -17,15 +16,7 @@ async function adminAuth(req) {
   }
 
   // Step 2: Verify session expiry and retrieve user from database
-  const pool = mysql.createPool({
-    host: "localhost",
-    user: "root",
-    password: "ROOT",
-    database: "krishify",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  })
+  const pool = getPool()
 
   const connection = await pool.getConnection()
 

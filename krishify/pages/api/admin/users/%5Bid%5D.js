@@ -1,5 +1,4 @@
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('../../../../lib/db')
 module.exports = async function handler(req, res) {
   // Step 1: Admin authorization
   const sessionId = req.cookies?.krishify_session
@@ -7,15 +6,7 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: "Unauthenticated" })
   }
 
-  const pool = mysql.createPool({
-    host: "localhost",
-    user: "root",
-    password: "ROOT",
-    database: "krishify",
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0,
-  })
+  const pool = getPool()
 
   const connection = await pool.getConnection()
 

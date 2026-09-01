@@ -1,6 +1,5 @@
-const mysql = require('mysql2/promise')
-
-const pool = mysql.createPool({ host: 'localhost', user: 'root', password: 'ROOT', database: 'krishify', waitForConnections: true, connectionLimit: 10, queueLimit: 0 })
+const { getPool } = require('../../../lib/db')
+const pool = getPool()
 
 async function getUser(sessionId) {
   if (!sessionId) return null

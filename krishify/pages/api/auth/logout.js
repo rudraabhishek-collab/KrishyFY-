@@ -1,6 +1,5 @@
 require("dotenv/config")
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('../../../lib/db')
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" })
@@ -9,15 +8,7 @@ module.exports = async function handler(req, res) {
   try {
     const sessionId = req.cookies["krishify_session"]
 
-    const pool = mysql.createPool({
-      host: "localhost",
-      user: "root",
-      password: "ROOT",
-      database: "krishify",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
+    const pool = getPool()
 
     const connection = await pool.getConnection()
 

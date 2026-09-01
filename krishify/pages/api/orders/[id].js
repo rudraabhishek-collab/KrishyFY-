@@ -1,5 +1,4 @@
-const mysql = require("mysql2/promise")
-
+const { getPool } = require('../../../lib/db')
 async function handler(req, res) {
   try {
     const orderId = req.query.id
@@ -34,15 +33,7 @@ async function getOrderDetailHandler(req, res) {
     }
 
     // Verify session
-    const pool = mysql.createPool({
-      host: "localhost",
-      user: "root",
-      password: "ROOT",
-      database: "krishify",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
+    const pool = getPool()
 
     const connection = await pool.getConnection()
 
@@ -106,15 +97,7 @@ async function updateOrderStatusHandler(req, res) {
     }
 
     // Verify session
-    const pool = mysql.createPool({
-      host: "localhost",
-      user: "root",
-      password: "ROOT",
-      database: "krishify",
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    })
+    const pool = getPool()
 
     const connection = await pool.getConnection()
 
