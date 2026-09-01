@@ -1,101 +1,83 @@
 const React = require('react')
 
-function statCard(icon, label, value, color) {
-  return React.createElement('div', {
-    style: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', textAlign: 'center' }
-  },
-    React.createElement('div', { style: { fontSize: '28px', marginBottom: '8px' } }, icon),
-    React.createElement('div', { style: { fontSize: '30px', fontWeight: '800', color } }, value ?? '—'),
-    React.createElement('div', { style: { fontSize: '13px', color: '#6b7280', fontWeight: '500', marginTop: '4px' } }, label)
-  )
-}
-
 function AdminDashboard() {
   const [data, setData] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
 
   React.useEffect(() => {
-    fetch('/api/admin/dashboard', { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) setData(d.dashboard)
-        else { setError(d.error || 'Failed'); if (d.error?.includes('Admin') || d.error?.includes('auth')) window.location.href = '/login' }
-        setLoading(false)
-      }).catch(() => { setError('Network error'); setLoading(false) })
+    fetch('/api/admin/dashboard', { credentials: 'include' }).then(r => r.json()).then(d => {
+      if (d.success) setData(d.dashboard)
+      else { setError(d.error || 'Failed'); if (d.error?.includes('Admin') || d.error?.includes('auth')) window.location.href = '/login' }
+      setLoading(false)
+    }).catch(() => { setError('Network error'); setLoading(false) })
   }, [])
 
-  if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
-    React.createElement('div', { style: { display: 'inline-block', width: '32px', height: '32px', border: '4px solid #dbeafe', borderTopColor: '#1e40af', borderRadius: '50%', animation: 'spin 0.7s linear infinite' } }),
-    React.createElement('p', { style: { color: '#6b7280', marginTop: '16px' } }, 'Loading dashboard...')
+  if (loading) return React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px', gap: '16px', color: '#64748b' } },
+    React.createElement('div', { className: 'spinner' }), React.createElement('span', null, 'Loading…')
   )
 
   const s = data || {}
-  return React.createElement('div', { style: { background: '#f9fafb', minHeight: '100vh' } },
-    React.createElement('div', { style: { background: 'linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%)', color: '#fff', padding: '32px 20px' } },
-      React.createElement('div', { style: { maxWidth: '1200px', margin: '0 auto', padding: '0 20px' } },
-        React.createElement('h1', { style: { fontSize: '28px', fontWeight: '800', margin: '0 0 4px 0' } }, '⚙️ Admin Dashboard'),
-        React.createElement('p', { style: { opacity: 0.8, margin: 0, fontSize: '14px' } }, 'Krishify platform overview')
+  const KPIs = [
+    ['👥', 'Total Users', s.users?.total, '#1d4ed8', '#dbeafe'],
+    ['🌾', 'Active Lots', s.crops?.active, '#166534', '#dcfce7'],
+    ['🏷️', 'Live Auctions', s.auctions?.active, '#d97706', '#fef9c3'],
+    ['📦', 'Pending Orders', s.orders?.pending, '#dc2626', '#fee2e2'],
+    ['💳', 'Paid Payments', s.payments?.paid, '#166534', '#dcfce7'],
+    ['🚚', 'Deliveries', s.deliveries?.total, '#64748b', '#f1f5f9'],
+    ['⭐', 'Reviews', s.reviews?.total, '#d97706', '#fef9c3'],
+    ['✓', 'Completed', s.orders?.completed, '#166534', '#dcfce7'],
+  ]
+
+  return React.createElement('div', { style: { background: '#f8fafc', minHeight: '100vh' } },
+    React.createElement('div', { style: { background: 'linear-gradient(160deg, #0a0f1e 0%, #1e293b 100%)', color: '#fff', padding: '44px 24px' } },
+      React.createElement('div', { style: { maxWidth: '1200px', margin: '0 auto' } },
+        React.createElement('div', { style: { fontSize: '12px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' } }, '⚙️ ADMIN · KRISHIFY'),
+        React.createElement('h1', { style: { fontSize: '28px', fontWeight: '900', margin: '0 0 4px 0', letterSpacing: '-0.5px' } }, 'Platform Dashboard'),
+        React.createElement('p', { style: { color: 'rgba(255,255,255,0.5)', margin: 0, fontSize: '14px' } }, 'Real-time mandi platform overview')
       )
     ),
-    React.createElement('div', { style: { maxWidth: '1200px', margin: '0 auto', padding: '32px 20px' } },
-      error && React.createElement('div', { style: { background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' } }, error),
+    React.createElement('div', { style: { maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' } },
+      error && React.createElement('div', { style: { background: '#fee2e2', color: '#991b1b', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', fontSize: '14px' } }, error),
       data && React.createElement(React.Fragment, null,
-        // Main stats
-        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '16px', marginBottom: '28px' } },
-          statCard('👥', 'Total Users', s.users?.total, '#1e40af'),
-          statCard('🌾', 'Active Crops', s.crops?.active, '#166534'),
-          statCard('🏷️', 'Open Auctions', s.auctions?.active, '#d97706'),
-          statCard('📦', 'Pending Orders', s.orders?.pending, '#dc2626'),
-          statCard('💳', 'Paid Payments', s.payments?.paid, '#166534'),
-          statCard('🚚', 'Deliveries', s.deliveries?.total, '#6b7280'),
-          statCard('⭐', 'Reviews', s.reviews?.total, '#d97706'),
-          statCard('✓', 'Completed Orders', s.orders?.completed, '#166534')
+        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '14px', marginBottom: '28px' } },
+          KPIs.map(([icon, label, val, col, bg]) =>
+            React.createElement('div', { key: label, style: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' } },
+              React.createElement('div', { style: { width: '40px', height: '40px', borderRadius: '10px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', marginBottom: '12px' } }, icon),
+              React.createElement('div', { style: { fontSize: '26px', fontWeight: '900', color: col, lineHeight: 1 } }, val ?? '—'),
+              React.createElement('div', { style: { fontSize: '13px', color: '#64748b', fontWeight: '600', marginTop: '4px' } }, label)
+            )
+          )
         ),
-        // Breakdown cards
-        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '24px' } },
-          breakdownCard('👥 Users', [
-            ['Farmers', s.users?.farmers],
-            ['Buyers', s.users?.buyers],
-            ['Admins', s.users?.admins],
-          ]),
-          breakdownCard('📦 Orders', [
-            ['Pending', s.orders?.pending],
-            ['Confirmed', s.orders?.confirmed],
-            ['Processing', s.orders?.processing],
-            ['Completed', s.orders?.completed],
-            ['Cancelled', s.orders?.cancelled],
-          ]),
-          breakdownCard('🚚 Deliveries', [
-            ['Created', s.deliveries?.created],
-            ['In Transit', s.deliveries?.in_transit],
-            ['Delivered', s.deliveries?.delivered],
-            ['Cancelled', s.deliveries?.cancelled],
-          ])
+        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' } },
+          [['👥 Users', [['Farmers', s.users?.farmers], ['Buyers', s.users?.buyers], ['Admins', s.users?.admins]]],
+           ['📦 Orders', [['Pending', s.orders?.pending], ['Confirmed', s.orders?.confirmed], ['Completed', s.orders?.completed], ['Cancelled', s.orders?.cancelled]]],
+           ['🚚 Deliveries', [['Created', s.deliveries?.created], ['In Transit', s.deliveries?.in_transit], ['Delivered', s.deliveries?.delivered]]]
+          ].map(([title, rows]) =>
+            React.createElement('div', { key: title, style: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '20px' } },
+              React.createElement('h3', { style: { fontSize: '14px', fontWeight: '800', margin: '0 0 14px 0', color: '#374151' } }, title),
+              rows.map(([label, val]) =>
+                React.createElement('div', { key: label, style: { display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9', fontSize: '14px' } },
+                  React.createElement('span', { style: { color: '#64748b' } }, label),
+                  React.createElement('span', { style: { fontWeight: '800', color: '#0f172a' } }, val ?? 0)
+                )
+              )
+            )
+          )
         ),
-        // Quick nav
-        React.createElement('div', { style: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px' } },
-          React.createElement('h2', { style: { fontSize: '16px', fontWeight: '700', margin: '0 0 14px 0' } }, '⚡ Quick Navigation'),
+        React.createElement('div', { style: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '22px' } },
+          React.createElement('h3', { style: { fontSize: '14px', fontWeight: '800', margin: '0 0 16px 0', color: '#374151' } }, '⚡ Quick Navigation'),
           React.createElement('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
-            [['👥 Users', '/admin/users'], ['🌾 Crops', '/admin/crops'], ['🏷️ Auctions', '/admin/auctions'],
-             ['📦 Orders', '/admin/orders'], ['💳 Payments', '/admin/payments'], ['🚚 Deliveries', '/admin/delivery'], ['⭐ Reviews', '/admin/reviews']]
-            .map(([label, href]) => React.createElement('a', { key: href, href,
-              style: { padding: '7px 14px', borderRadius: '8px', border: '1.5px solid #d1d5db', textDecoration: 'none', color: '#374151', fontSize: '13px', fontWeight: '500', background: '#fff' }
-            }, label))
+            [['👥 Users', '/admin/users'], ['🌾 Lots', '/admin/crops'], ['🏷️ Auctions', '/admin/auctions'], ['📦 Orders', '/admin/orders'], ['💳 Payments', '/admin/payments'], ['🚚 Delivery', '/admin/delivery'], ['⭐ Reviews', '/admin/reviews']].map(([l, h]) =>
+              React.createElement('a', { key: h, href: h, style: { padding: '8px 16px', background: '#f8fafc', color: '#374151', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontWeight: '700', textDecoration: 'none', transition: 'all 0.15s' },
+                onMouseEnter: e => { e.target.style.background = '#f0fdf4'; e.target.style.borderColor = '#166534'; e.target.style.color = '#166534' },
+                onMouseLeave: e => { e.target.style.background = '#f8fafc'; e.target.style.borderColor = '#e2e8f0'; e.target.style.color = '#374151' }
+              }, l)
+            )
           )
         )
       )
     )
-  )
-}
-
-function breakdownCard(title, rows) {
-  return React.createElement('div', { style: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px' } },
-    React.createElement('h3', { style: { fontSize: '15px', fontWeight: '700', margin: '0 0 12px 0' } }, title),
-    rows.map(([label, val]) => React.createElement('div', { key: label, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f3f4f6', fontSize: '14px' } },
-      React.createElement('span', { style: { color: '#6b7280' } }, label),
-      React.createElement('span', { style: { fontWeight: '700', color: '#111827' } }, val ?? 0)
-    ))
   )
 }
 
