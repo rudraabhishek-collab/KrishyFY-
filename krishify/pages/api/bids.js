@@ -105,12 +105,12 @@ async function createBidHandler(req, res) {
       [auction.id]
     )
 
-    const currentHighest = currentBids.length > 0 ? Number(currentBids[0].amount) : Number(crop.expectedPricePerQuintal || 0)
-    const minimumValidBid = currentHighest + Number(crop.minimumIncrement || 25)
+    const currentHighest = currentBids.length > 0 ? Number(currentBids[0].amount) : Number(auction.startingPrice || 0)
+    const minimumValidBid = currentHighest + Number(auction.minimumIncrement || 0)
 
     if (Number(bidPricePerQuintal) < minimumValidBid) {
       return res.status(400).json({
-        error: `Bid must be at least ₹${minimumValidBid}/quintal (current: ₹${currentHighest}/quintal + increment ₹${crop.minimumIncrement || 25}/quintal)`,
+        error: `Bid must be at least ₹${minimumValidBid}/quintal (current: ₹${currentHighest}/quintal + increment ₹${auction.minimumIncrement || 0}/quintal)`,
       })
     }
 
@@ -178,16 +178,17 @@ async function getBidsHandler(req, res) {
 
   try {
     let query = `SELECT b.id, b.amount AS bidPricePerQuintal, b.createdAt, b.auctionId, u.name AS buyerName, cl.cropName, cl.quantityKg, cl.lotStatus `+
-      `FROM Bid b JOIN User u ON b.buyerId = u.id JOIN CropListing cl ON b.auctionId = cl.id `
-
+      `FROM Bid b JOIN User u ON b.buyerId = u.id `
+    
     let params = []
 
     if (auctionId) {
-      query += " WHERE b.auctionId = ?"
+      query += `JOIN Auction a ON b.auctionId = a.id `
+      query += `JOIN CropListing cl ON a.cropListingId = cl.id `
       params.push(auctionId)
     }
 
-    query += " ORDER BY b.amount DESC, b.createdAt DESC"
+    query += `ORDER BY b.amount DESC, b.createdAt DESC`
 
     const [bids] = await connection.execute(query, params)
 

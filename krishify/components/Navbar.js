@@ -76,6 +76,7 @@ function Navbar() {
       React.createElement(L, { href: '/admin/orders' }, 'Orders'),
       React.createElement(L, { href: '/admin/payments' }, 'Payments'),
       React.createElement(L, { href: '/admin/delivery' }, 'Delivery'),
+      React.createElement(L, { href: '/notifications' }, '🔔 Notifications'),
       React.createElement(L, { href: '/admin/reviews' }, 'Reviews'),
       React.createElement('button', { onClick: handleLogout, style: { ...outline, marginLeft: '6px' } }, 'Logout')
     )

@@ -49,7 +49,7 @@ function MandiLotDetailPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ auctionId: auction.id, amount: amt })
+      body: JSON.stringify({ cropListingId: id, bidPricePerQuintal: amt })
     }).then(r => r.json()).then(d => {
       if (d.success) {
         setBidMsg('✅ Bid placed successfully!')

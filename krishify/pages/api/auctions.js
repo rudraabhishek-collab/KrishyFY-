@@ -53,6 +53,7 @@ async function getAuctionsHandler(req, res) {
       `SELECT a.id, a.cropListingId, a.startingPrice, a.minimumIncrement, a.status,
               a.startsAt, a.endsAt, a.createdAt,
               cl.cropName, cl.category, cl.quantity, cl.unit, cl.location,
+              cl.quantityKg, cl.expectedPricePerQuintal, cl.lotStatus, cl.inspectionStatus,
               u.name AS farmerName,
               (SELECT MAX(b.amount) FROM Bid b WHERE b.auctionId = a.id) AS currentBid,
               (SELECT COUNT(*) FROM Bid b WHERE b.auctionId = a.id) AS bidCount

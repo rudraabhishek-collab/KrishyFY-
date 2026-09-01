@@ -34,7 +34,7 @@ function MandiLotCard({ listing }) {
   const lotStatusBadge = statusBadge(listing.lotStatus)
   
   return React.createElement('a', {
-    href: `/mandi-lot/${listing.id}`,
+    href: `/marketplace/${listing.id}`,
     style: { textDecoration: 'none', color: 'inherit', display: 'block' }
   },
     React.createElement('div', { className: 'card', style: { cursor: 'pointer', height: '100%' } },

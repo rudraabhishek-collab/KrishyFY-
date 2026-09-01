@@ -39,7 +39,13 @@ module.exports = async function handler(req, res) {
 
       // Get only this farmer's listings, newest first
       const [listings] = await connection.execute(
-        "SELECT cl.*, u.name as farmerName FROM CropListing cl JOIN User u ON cl.farmerId = u.id WHERE cl.farmerId = ? ORDER BY cl.createdAt DESC",
+        `SELECT cl.id, cl.cropName, cl.category, cl.description, cl.quantity, cl.unit,
+                cl.quantityKg, cl.expectedPrice, cl.expectedPricePerQuintal,
+                cl.lotStatus, cl.inspectionStatus, cl.aiAssessmentStatus,
+                cl.location, cl.harvestDate, cl.status, cl.createdAt,
+                u.name as farmerName
+         FROM CropListing cl JOIN User u ON cl.farmerId = u.id
+         WHERE cl.farmerId = ? ORDER BY cl.createdAt DESC`,
         [user.userId]
       )
 

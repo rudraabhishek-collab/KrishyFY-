@@ -66,7 +66,9 @@ async function getListingsHandler(req, res) {
 
     const [listings] = await connection.execute(
       `SELECT cl.id, cl.cropName, cl.category, cl.description, cl.quantity, cl.unit,
-              cl.expectedPrice, cl.location, cl.harvestDate, cl.status, cl.createdAt,
+              cl.quantityKg, cl.expectedPrice, cl.expectedPricePerQuintal,
+              cl.lotStatus, cl.inspectionStatus, cl.aiAssessmentStatus,
+              cl.location, cl.harvestDate, cl.status, cl.createdAt,
               cl.farmerId,
               u.name AS farmerName
        FROM CropListing cl
@@ -103,24 +105,37 @@ async function createListingHandler(req, res) {
   const body = req.body || {}
   const { cropName, category, description, quantity, unit, expectedPrice, location, harvestDate } = body
 
-  if (!cropName || !category || !quantity || !unit || !location) {
-    return res.status(400).json({ error: "cropName, category, quantity, unit, and location are required" })
+  if (!cropName || !category || !quantity || !unit || !location || Number(quantity) <= 0) {
+    return res.status(400).json({ error: "cropName, category, quantity (must be >0), unit, and location are required" })
   }
+
+  if (!expectedPrice || Number(expectedPrice) <= 0) {
+    return res.status(400).json({ error: "Expected price per quintal must be greater than 0" })
+  }
+
+  const quantityKg = (() => {
+    const q = Number(quantity)
+    if (unit === 'kg') return Math.max(q, 0)
+    if (unit === 'quintal') return Math.max(q * 100, 0)
+    if (unit === 'ton') return Math.max(q * 1000, 0)
+    return Math.max(q, 0)
+  })()
+
+  const pricePerQuintal = Number(expectedPrice)
 
   const connection = await pool.getConnection()
   try {
     const listingId = require("crypto").randomUUID()
     const harvest = harvestDate ? new Date(harvestDate) : null
-    const price = expectedPrice ? Number(expectedPrice) : null
 
     await connection.execute(
-      `INSERT INTO CropListing (id, farmerId, cropName, category, description, quantity, unit, expectedPrice, location, harvestDate, status, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW(), NOW())`,
-      [listingId, user.userId, cropName, category, description || null, String(quantity), unit, price, location, harvest]
+      `INSERT INTO CropListing (id, farmerId, cropName, category, description, quantity, unit, quantityKg, expectedPricePerQuintal, expectedPrice, location, harvestDate, status, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', NOW(), NOW())`,
+      [listingId, user.userId, cropName, category, description || null, String(quantity), unit, quantityKg, pricePerQuintal, pricePerQuintal, location, harvest]
     )
 
     const [listings] = await connection.execute(
-      "SELECT * FROM CropListing WHERE id = ?",
+      "SELECT id, cropName, category, description, quantity, unit, quantityKg, expectedPricePerQuintal, lotStatus, inspectionStatus, aiAssessmentStatus FROM CropListing WHERE id = ?",
       [listingId]
     )
 

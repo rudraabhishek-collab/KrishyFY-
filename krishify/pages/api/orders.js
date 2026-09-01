@@ -66,16 +66,6 @@ async function createOrderHandler(req, res) {
 
     const crop = listings[0]
 
-    // Only ACTIVE lots with approved inspection can be ordered
-    if (crop.lotStatus !== 'ACTIVE') {
-      return res.status(400).json({ error: 'Lot is not active for purchase. Current status: ' + crop.lotStatus })
-    }
-
-    if (crop.farmerId === user.userId) {
-      return res.status(400).json({ error: "Cannot purchase your own crop" })
-    }
-
-    // Physical inspection must be APPROVED before ordering
     if (crop.inspectionStatus !== 'APPROVED') {
       return res.status(409).json({ error: 'Physical inspection must be approved before order. Current status: ' + crop.inspectionStatus })
     }
