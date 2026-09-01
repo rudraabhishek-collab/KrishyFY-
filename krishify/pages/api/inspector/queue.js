@@ -35,14 +35,19 @@ module.exports = async function handler(req, res) {
         return res.status(403).json({ error: "Inspector role required" })
       }
 
-      // Get pending and in-progress inspections
+      // Get pending and in-progress inspections (or all if requested)
+      const showAll = req.query.all === 'true'
+      const whereFilter = showAll
+        ? "WHERE 1=1"
+        : "WHERE ci.status IN ('PENDING', 'IN_PROGRESS')"
+
       const [inspections] = await connection.execute(
-        "SELECT ci.id, ci.cropListingId, cl.cropName, ci.status, ci.grade, ci.moisturePercentage, ci.inspectedAt, u.name AS farmerName "+
-        "FROM CropInspection ci "+
-        "JOIN CropListing cl ON ci.cropListingId = cl.id "+
-        "LEFT JOIN User u ON ci.inspectorId = u.id "+
-        "WHERE ci.status IN ('PENDING', 'IN_PROGRESS') "+
-        "ORDER BY ci.createdAt DESC LIMIT 20"
+        "SELECT ci.id, ci.cropListingId, cl.cropName, cl.quantityKg, cl.location, ci.status, ci.grade, ci.moisturePercentage, ci.inspectedAt, u.name AS farmerName " +
+        "FROM CropInspection ci " +
+        "JOIN CropListing cl ON ci.cropListingId = cl.id " +
+        "LEFT JOIN User u ON cl.farmerId = u.id " +
+        whereFilter + " " +
+        "ORDER BY ci.createdAt DESC LIMIT 50"
       )
 
       return res.status(200).json({
@@ -57,3 +62,5 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "Internal server error" })
   }
 }
+
+module.exports.default = module.exports

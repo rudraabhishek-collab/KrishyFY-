@@ -42,9 +42,12 @@ module.exports = async function handler(req, res) {
 async function getAuctionsHandler(req, res) {
   const connection = await pool.getConnection()
   try {
-    const { status } = req.query
-    let whereClause = status ? "WHERE a.status = ?" : ""
-    let params = status ? [status] : []
+    const { status, cropListingId } = req.query
+    const conditions = []
+    const params = []
+    if (status) { conditions.push("a.status = ?"); params.push(status) }
+    if (cropListingId) { conditions.push("a.cropListingId = ?"); params.push(cropListingId) }
+    let whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : ""
 
     const [auctions] = await connection.execute(
       `SELECT a.id, a.cropListingId, a.startingPrice, a.minimumIncrement, a.status,
