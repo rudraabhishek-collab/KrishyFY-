@@ -1,28 +1,42 @@
 const mysql = require('mysql2/promise')
 
-// Parse DATABASE_URL if provided (for production/Vercel)
-// Format: mysql://user:password@host:port/database
 function getConfig() {
-  if (process.env.DATABASE_URL) {
+  const dbUrl = process.env.DATABASE_URL
+
+  if (dbUrl) {
     try {
-      const url = new URL(process.env.DATABASE_URL)
+      // Handle both mysql:// and mysql2:// schemes
+      const urlStr = dbUrl.replace(/^mysql2:\/\//, 'mysql://')
+      const url = new URL(urlStr)
+      const host = url.hostname
+      const port = parseInt(url.port) || 3306
+      const user = decodeURIComponent(url.username)
+      const password = decodeURIComponent(url.password)
+      const database = url.pathname.replace(/^\//, '')
+
+      // Enable SSL for cloud databases (anything not localhost)
+      const isLocal = host === 'localhost' || host === '127.0.0.1'
+      const sslParam = url.searchParams.get('ssl')
+      const sslcaParam = url.searchParams.get('sslaccept')
+      
+      const ssl = !isLocal || sslParam === 'true' || sslcaParam
+        ? { rejectUnauthorized: false }
+        : undefined
+
       return {
-        host: url.hostname,
-        port: parseInt(url.port) || 3306,
-        user: url.username,
-        password: url.password,
-        database: url.pathname.slice(1), // remove leading /
+        host, port, user, password, database,
         waitForConnections: true,
-        connectionLimit: 10,
+        connectionLimit: parseInt(process.env.DB_POOL_SIZE) || 5,
         queueLimit: 0,
-        ssl: url.searchParams.get('ssl') === 'true' ? { rejectUnauthorized: false } : undefined,
+        ssl,
+        connectTimeout: 10000,
       }
     } catch (e) {
-      console.error('Invalid DATABASE_URL format:', e.message)
+      console.error('[db] Invalid DATABASE_URL:', e.message)
     }
   }
 
-  // Local development fallback
+  // Local development defaults
   return {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT) || 3306,
@@ -30,8 +44,9 @@ function getConfig() {
     password: process.env.DB_PASSWORD || 'ROOT',
     database: process.env.DB_NAME || 'krishify',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 5,
     queueLimit: 0,
+    connectTimeout: 10000,
   }
 }
 
@@ -39,7 +54,15 @@ let _pool = null
 
 function getPool() {
   if (!_pool) {
-    _pool = mysql.createPool(getConfig())
+    const config = getConfig()
+    _pool = mysql.createPool(config)
+    
+    // Test connection on first use in production
+    if (process.env.NODE_ENV === 'production') {
+      _pool.getConnection()
+        .then(conn => { conn.release(); console.log('[db] Connected to database') })
+        .catch(err => console.error('[db] Connection failed:', err.message))
+    }
   }
   return _pool
 }
