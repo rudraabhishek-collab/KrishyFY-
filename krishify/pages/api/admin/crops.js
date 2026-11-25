@@ -13,8 +13,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const { status, category, search, page = 1, limit = 20 } = req.query
-    const pageNum = parseInt(page, 10)
-    const pageSize = parseInt(limit, 10)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
     const offset = (pageNum - 1) * pageSize
 
     const conditions = []
@@ -50,8 +50,8 @@ module.exports = async function handler(req, res) {
        JOIN User u ON cl.farmerId = u.id
        ${whereClause}
        ORDER BY cl.createdAt DESC
-       LIMIT ? OFFSET ?`,
-      [...whereParams, pageSize, offset]
+       LIMIT ${pageSize} OFFSET ${offset}`,
+      whereParams
     )
 
     return res.status(200).json({ success: true, crops, pagination: { page: pageNum, limit: pageSize, total, totalPages } })

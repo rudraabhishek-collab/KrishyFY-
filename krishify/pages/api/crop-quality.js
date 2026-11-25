@@ -69,6 +69,11 @@ module.exports = async function handler(req, res) {
         )
       }
 
+      await conn.execute(
+        "UPDATE CropListing SET aiAssessmentStatus = 'COMPLETED', updatedAt = NOW() WHERE id = ?",
+        [cropListingId]
+      )
+
       const [assessment] = await conn.execute('SELECT * FROM CropQualityAssessment WHERE cropListingId = ?', [cropListingId])
       return res.status(200).json({ success: true, assessment: assessment[0] })
     } finally { conn.release() }

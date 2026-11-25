@@ -22,7 +22,7 @@ function FarmerBidsPage() {
 
   React.useEffect(() => {
     Promise.all([
-      fetch('/api/auctions', { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/auctions?mine=true', { credentials: 'include' }).then(r => r.json()),
       fetch('/api/crops/mine', { credentials: 'include' }).then(r => r.json())
     ]).then(([aData, cData]) => {
       if (aData.success) setAuctions(aData.auctions || [])
@@ -31,7 +31,7 @@ function FarmerBidsPage() {
       if (cData.success) {
         // Only QUALITY_VERIFIED or AUCTION_READY lots can start an auction
         const eligible = (cData.listings || []).filter(l =>
-          l.lotStatus === 'QUALITY_VERIFIED' || l.lotStatus === 'AUCTION_READY' || l.lotStatus === 'AUCTION_ACTIVE'
+          l.lotStatus === 'QUALITY_VERIFIED' || l.lotStatus === 'AUCTION_READY'
         )
         setEligibleCrops(eligible)
       }
@@ -45,6 +45,18 @@ function FarmerBidsPage() {
     if (bidsMap[auctionId]) return
     fetch('/api/bids?auctionId=' + auctionId, { credentials: 'include' })
       .then(r => r.json()).then(d => { if (d.success) setBidsMap(m => ({ ...m, [auctionId]: d.bids })) })
+  }
+
+  function finalizeAuction(auctionId) {
+    fetch('/api/auctions/' + auctionId + '/finalize', { method: 'POST', credentials: 'include' })
+      .then(r => r.json()).then(d => {
+        if (d.success && d.order) {
+          setAuctions(prev => prev.map(a => a.id === auctionId ? { ...a, status: 'ENDED', orderCount: 1, orderId: d.order.id } : a))
+          alert('✅ Auction finalized! Order created.')
+        } else {
+          alert(d.error || 'Failed to finalize auction')
+        }
+      }).catch(() => alert('Network error'))
   }
 
   function createAuction(e) {
@@ -161,8 +173,13 @@ function FarmerBidsPage() {
                 React.createElement('span', { style: { background: ended ? '#f3f4f6' : '#dcfce7', color: ended ? '#6b7280' : '#166534', padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: '700' } }, ended ? 'ENDED' : '🔴 LIVE • ' + timeLeft(a.endsAt))
               )
             ),
-            React.createElement('button', { onClick: () => toggleBids(a.id), style: { background: 'none', border: '1px solid #d1d5db', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: '#374151', fontWeight: '500' } },
-              expanded === a.id ? '▲ Hide Bids' : '▼ View Bids (' + (a.bidCount || 0) + ')'
+            React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
+              React.createElement('button', { onClick: () => toggleBids(a.id), style: { background: 'none', border: '1px solid #d1d5db', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: '#374151', fontWeight: '500' } },
+                expanded === a.id ? '▲ Hide Bids' : '▼ View Bids (' + (a.bidCount || 0) + ')'
+              ),
+              a.orderId
+                ? React.createElement('a', { href: '/orders/' + a.orderId, style: { background: '#dcfce7', color: '#166534', textDecoration: 'none', borderRadius: '8px', padding: '6px 14px', fontSize: '13px', fontWeight: '700' } }, '📦 View Order →')
+                : (Number(a.bidCount) > 0 && React.createElement('button', { onClick: () => finalizeAuction(a.id), style: { background: '#166534', color: '#fff', border: 'none', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' } }, ended ? '🏆 Finalize & Create Order' : '🏆 Close & Accept Highest Bid'))
             ),
             expanded === a.id && React.createElement('div', { style: { marginTop: '14px', borderTop: '1px solid #f3f4f6', paddingTop: '14px' } },
               !bids ? React.createElement('p', { style: { color: '#9ca3af', fontSize: '13px' } }, 'Loading...') :
@@ -173,13 +190,16 @@ function FarmerBidsPage() {
                     ['#', 'Buyer', 'Bid/Quintal', 'Total Lot Value', 'Time'].map(h => React.createElement('th', { key: h, style: { padding: '8px 12px', textAlign: 'left', fontWeight: '700', color: '#6b7280', fontSize: '11px', textTransform: 'uppercase' } }, h))
                   )),
                   React.createElement('tbody', null,
-                    bids.map((b, i) => React.createElement('tr', { key: b.id, style: { borderTop: '1px solid #f3f4f6' } },
-                      React.createElement('td', { style: { padding: '10px 12px', fontWeight: '700', color: i === 0 ? '#166534' : '#374151' } }, i === 0 ? '🏆' : i + 1),
-                      React.createElement('td', { style: { padding: '10px 12px' } }, b.buyerName),
-                      React.createElement('td', { style: { padding: '10px 12px', fontWeight: '800', color: '#166534' } }, '₹' + Number(b.amount).toLocaleString('en-IN') + '/q'),
-                      React.createElement('td', { style: { padding: '10px 12px', fontWeight: '700' } }, '₹' + Math.round(qKg / 100 * Number(b.amount)).toLocaleString('en-IN')),
-                      React.createElement('td', { style: { padding: '10px 12px', color: '#9ca3af' } }, new Date(b.createdAt).toLocaleString('en-IN'))
-                    ))
+                    bids.map((b, i) => {
+                      const bidPrice = Number(b.bidPricePerQuintal ?? b.amount ?? 0)
+                      return React.createElement('tr', { key: b.id, style: { borderTop: '1px solid #f3f4f6' } },
+                        React.createElement('td', { style: { padding: '10px 12px', fontWeight: '700', color: i === 0 ? '#166534' : '#374151' } }, i === 0 ? '🏆' : i + 1),
+                        React.createElement('td', { style: { padding: '10px 12px' } }, b.buyerName),
+                        React.createElement('td', { style: { padding: '10px 12px', fontWeight: '800', color: '#166534' } }, '₹' + bidPrice.toLocaleString('en-IN') + '/q'),
+                        React.createElement('td', { style: { padding: '10px 12px', fontWeight: '700' } }, '₹' + Math.round(qKg / 100 * bidPrice).toLocaleString('en-IN')),
+                        React.createElement('td', { style: { padding: '10px 12px', color: '#9ca3af' } }, new Date(b.createdAt).toLocaleString('en-IN'))
+                      )
+                    })
                   )
                 )
               )

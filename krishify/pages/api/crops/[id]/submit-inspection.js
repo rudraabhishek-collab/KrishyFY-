@@ -21,10 +21,12 @@ module.exports = async function handler(req, res) {
       const [crops] = await conn.execute('SELECT id, farmerId, lotStatus FROM CropListing WHERE id=?', [id])
       if (!crops.length) return res.status(404).json({ error: 'Lot not found' })
       if (crops[0].farmerId !== sess[0].userId) return res.status(403).json({ error: 'Not your lot' })
-      if (crops[0].lotStatus !== 'DRAFT' && crops[0].lotStatus !== null) return res.status(409).json({ error: 'Lot already submitted' })
+      if (crops[0].lotStatus !== 'DRAFT' && crops[0].lotStatus !== 'REINSPECTION_REQUIRED' && crops[0].lotStatus !== null) {
+        return res.status(409).json({ error: 'Lot already submitted' })
+      }
 
       // Update lot status
-      await conn.execute("UPDATE CropListing SET lotStatus='SUBMITTED_FOR_INSPECTION', updatedAt=NOW() WHERE id=?", [id])
+      await conn.execute("UPDATE CropListing SET lotStatus='SUBMITTED_FOR_INSPECTION', inspectionStatus='PENDING', updatedAt=NOW() WHERE id=?", [id])
 
       // Create or update inspection record
       const [existing] = await conn.execute('SELECT id FROM CropInspection WHERE cropListingId=?', [id])

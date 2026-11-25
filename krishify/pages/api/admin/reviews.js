@@ -10,8 +10,8 @@ module.exports = async function handler(req, res) {
     if (!auth.success) return res.status(auth.error === 'Unauthenticated' ? 401 : 403).json({ error: auth.error })
 
     const { page = 1, limit = 20 } = req.query
-    const pageNum = parseInt(page, 10)
-    const pageSize = parseInt(limit, 10)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
     const offset = (pageNum - 1) * pageSize
 
     const conn = await pool.getConnection()
@@ -28,8 +28,7 @@ module.exports = async function handler(req, res) {
          JOIN User uf ON r.farmerId = uf.id
          JOIN CropListing cl ON r.cropListingId = cl.id
          ORDER BY r.createdAt DESC
-         LIMIT ? OFFSET ?`,
-        [pageSize, offset]
+         LIMIT ${pageSize} OFFSET ${offset}`
       )
 
       return res.status(200).json({ success: true, reviews, pagination: { page: pageNum, limit: pageSize, total, totalPages } })

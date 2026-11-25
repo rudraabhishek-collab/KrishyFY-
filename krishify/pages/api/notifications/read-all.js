@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
 
       // Mark all unread notifications as read for current user only
       const [result] = await connection.execute(
-        "UPDATE Notification SET read = true, updatedAt = NOW() WHERE userId = ? AND read = false",
+        "UPDATE Notification SET `read` = true, updatedAt = NOW() WHERE userId = ? AND `read` = false",
         [user.userId]
       )
 

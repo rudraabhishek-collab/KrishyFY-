@@ -53,6 +53,11 @@ function InspectorDashboard() {
       if (d.success) {
         setMsg('✅ Inspection ' + status.toLowerCase() + ' successfully.')
         setQueue(q => q.filter(i => i.id !== selected.id))
+        setAllInspections(prev => {
+          const exists = prev.some(i => i.id === selected.id)
+          const updatedItem = d.inspection || { ...selected, status, ...form }
+          return exists ? prev.map(i => i.id === selected.id ? updatedItem : i) : [updatedItem, ...prev]
+        })
         setSelected(null)
       } else setMsg('❌ ' + (d.error || 'Failed'))
       setSubmitting(false)

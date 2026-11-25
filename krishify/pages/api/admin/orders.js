@@ -13,8 +13,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const { status, page = 1, limit = 20 } = req.query
-    const pageNum = parseInt(page, 10)
-    const pageSize = parseInt(limit, 10)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
     const offset = (pageNum - 1) * pageSize
 
     let whereClause = ""
@@ -42,8 +42,8 @@ module.exports = async function handler(req, res) {
        JOIN CropListing cl ON o.cropListingId = cl.id
        ${whereClause}
        ORDER BY o.createdAt DESC
-       LIMIT ? OFFSET ?`,
-      [...whereParams, pageSize, offset]
+       LIMIT ${pageSize} OFFSET ${offset}`,
+      whereParams
     )
 
     return res.status(200).json({ success: true, orders, pagination: { page: pageNum, limit: pageSize, total, totalPages } })

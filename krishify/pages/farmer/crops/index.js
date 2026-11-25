@@ -21,6 +21,9 @@ function FarmerCropsPage() {
   const [listings, setListings] = React.useState([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
+  const [aiLotId, setAiLotId] = React.useState(null)
+  const [aiLoading, setAiLoading] = React.useState(false)
+  const [aiMsg, setAiMsg] = React.useState('')
 
   React.useEffect(() => {
     fetch('/api/crops/mine', { credentials: 'include' })
@@ -78,13 +81,25 @@ function FarmerCropsPage() {
               totalVal && cell('📊 Lot Value', '₹' + totalVal.toLocaleString('en-IN')),
               cell('🔍 Inspection', l.inspectionStatus || 'PENDING')
             ),
-            React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
               React.createElement('a', { href: '/marketplace/' + l.id, style: { color: '#166534', textDecoration: 'none', fontSize: '13px', fontWeight: '600', padding: '6px 12px', border: '1px solid #166534', borderRadius: '8px' } }, 'View Lot →'),
-              (!l.lotStatus || l.lotStatus === 'DRAFT') && React.createElement('button', {
+              (!l.lotStatus || l.lotStatus === 'DRAFT' || l.lotStatus === 'REINSPECTION_REQUIRED') && React.createElement('button', {
                 onClick: () => submitForInspection(l.id, setListings),
                 style: { color: '#1e40af', background: '#dbeafe', border: 'none', borderRadius: '8px', padding: '6px 12px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }
-              }, '📋 Submit for Inspection')
-            )
+              }, '📋 Submit for Inspection'),
+              l.inspectionStatus === 'APPROVED' && l.aiAssessmentStatus !== 'COMPLETED' && React.createElement('label', {
+                style: { color: '#6d28d9', background: '#ede9fe', borderRadius: '8px', padding: '6px 12px', fontWeight: '600', fontSize: '13px', cursor: aiLoading && aiLotId === l.id ? 'wait' : 'pointer' }
+              },
+                aiLoading && aiLotId === l.id ? '🤖 Analyzing...' : '🤖 Run AI Assessment',
+                React.createElement('input', {
+                  type: 'file', accept: 'image/jpeg,image/png,image/webp', style: { display: 'none' },
+                  disabled: aiLoading,
+                  onChange: e => runAiAssessment(l.id, e.target.files?.[0], setAiLotId, setAiLoading, setAiMsg, setListings)
+                })
+              ),
+              l.aiAssessmentStatus === 'COMPLETED' && React.createElement('span', { style: { color: '#166534', fontSize: '12px', fontWeight: '700', padding: '4px 8px', background: '#f0fdf4', borderRadius: '6px' } }, '🤖 AI Graded')
+            ),
+            aiMsg && aiLotId === l.id && React.createElement('p', { style: { marginTop: '8px', fontSize: '13px', color: aiMsg.startsWith('✅') ? '#166534' : '#991b1b', fontWeight: '600' } }, aiMsg)
           )
         })
       )
@@ -104,9 +119,32 @@ function submitForInspection(id, setListings) {
     .then(r => r.json())
     .then(d => {
       if (d.success) {
-        setListings(prev => prev.map(l => l.id === id ? { ...l, lotStatus: 'SUBMITTED_FOR_INSPECTION' } : l))
+        setListings(prev => prev.map(l => l.id === id ? { ...l, lotStatus: 'SUBMITTED_FOR_INSPECTION', inspectionStatus: 'PENDING' } : l))
       } else alert(d.error || 'Failed to submit')
     }).catch(() => alert('Network error'))
+}
+
+function runAiAssessment(id, file, setAiLotId, setAiLoading, setAiMsg, setListings) {
+  if (!file) return
+  setAiLotId(id); setAiLoading(true); setAiMsg('')
+  const reader = new FileReader()
+  reader.onload = () => {
+    fetch('/api/crop-quality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ cropListingId: id, imageBase64: reader.result, imageMimeType: file.type || 'image/jpeg' })
+    }).then(r => r.json()).then(d => {
+      if (d.success && d.assessment) {
+        setAiMsg('✅ AI Grade ' + d.assessment.grade + ' (Score: ' + d.assessment.score + '/100)')
+        setListings(prev => prev.map(l => l.id === id ? { ...l, aiAssessmentStatus: 'COMPLETED' } : l))
+      } else {
+        setAiMsg('❌ ' + (d.error || 'AI assessment failed'))
+      }
+      setAiLoading(false)
+    }).catch(() => { setAiMsg('❌ Network error'); setAiLoading(false) })
+  }
+  reader.readAsDataURL(file)
 }
 
 module.exports = FarmerCropsPage

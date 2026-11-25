@@ -1,6 +1,17 @@
 const { getPool } = require('../../../lib/db')
 const pool = getPool()
 
+function toNullableNumber(val) {
+  if (val === undefined || val === null || val === '') return null
+  const num = Number(val)
+  return Number.isNaN(num) ? null : num
+}
+
+function toNullableString(val) {
+  if (val === undefined || val === null || val === '') return null
+  return String(val)
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   try {
@@ -24,22 +35,19 @@ module.exports = async function handler(req, res) {
       const allowed = ['PENDING', 'IN_PROGRESS', 'APPROVED', 'REJECTED', 'REINSPECTION_REQUIRED']
       if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' })
 
-      // Build update SET clause
       const sets = ['status = ?', 'updatedAt = NOW()']
       const vals = [status]
-      if (grade !== undefined) { sets.push('grade = ?'); vals.push(grade) }
-      if (moisturePercentage !== undefined) { sets.push('moisturePercentage = ?'); vals.push(moisturePercentage) }
-      if (foreignMatterPercentage !== undefined) { sets.push('foreignMatterPercentage = ?'); vals.push(foreignMatterPercentage) }
-      if (damagedPercentage !== undefined) { sets.push('damagedPercentage = ?'); vals.push(damagedPercentage) }
-      if (weightKg !== undefined) { sets.push('weightKg = ?'); vals.push(weightKg) }
-      if (appearance !== undefined) { sets.push('appearance = ?'); vals.push(appearance) }
-      if (remarks !== undefined) { sets.push('remarks = ?'); vals.push(remarks) }
-      if (status === 'APPROVED') { sets.push('inspectedAt = NOW()'); }
+      if (grade !== undefined) { sets.push('grade = ?'); vals.push(toNullableString(grade)) }
+      if (moisturePercentage !== undefined) { sets.push('moisturePercentage = ?'); vals.push(toNullableNumber(moisturePercentage)) }
+      if (foreignMatterPercentage !== undefined) { sets.push('foreignMatterPercentage = ?'); vals.push(toNullableNumber(foreignMatterPercentage)) }
+      if (damagedPercentage !== undefined) { sets.push('damagedPercentage = ?'); vals.push(toNullableNumber(damagedPercentage)) }
+      if (weightKg !== undefined) { sets.push('weightKg = ?'); vals.push(toNullableNumber(weightKg)) }
+      if (appearance !== undefined) { sets.push('appearance = ?'); vals.push(toNullableString(appearance)) }
+      if (remarks !== undefined) { sets.push('remarks = ?'); vals.push(toNullableString(remarks)) }
+      if (status === 'APPROVED') { sets.push('inspectedAt = NOW()') }
 
-      // Assign inspector if not already set
       sets.push('inspectorId = COALESCE(inspectorId, ?)')
       vals.push(user.userId)
-
       vals.push(inspectionId)
 
       const [result] = await conn.execute(
@@ -48,17 +56,15 @@ module.exports = async function handler(req, res) {
       )
       if (result.affectedRows === 0) return res.status(404).json({ error: 'Inspection not found' })
 
-      // Update lot status based on inspection result
       const [inspRows] = await conn.execute('SELECT cropListingId FROM CropInspection WHERE id = ?', [inspectionId])
       if (inspRows.length > 0) {
         const cropId = inspRows[0].cropListingId
+        const [crops] = await conn.execute('SELECT farmerId, cropName FROM CropListing WHERE id=?', [cropId])
         if (status === 'APPROVED') {
           await conn.execute(
             "UPDATE CropListing SET lotStatus='QUALITY_VERIFIED', inspectionStatus='APPROVED', updatedAt=NOW() WHERE id=?",
             [cropId]
           )
-          // Notify farmer
-          const [crops] = await conn.execute('SELECT farmerId, cropName FROM CropListing WHERE id=?', [cropId])
           if (crops.length > 0) {
             await conn.execute(
               "INSERT INTO Notification (id, userId, type, title, message, relatedEntityType, relatedEntityId, `read`, createdAt, updatedAt) VALUES (UUID(),?,?,?,?,?,?,false,NOW(),NOW())",
@@ -70,15 +76,28 @@ module.exports = async function handler(req, res) {
             "UPDATE CropListing SET lotStatus='REJECTED', inspectionStatus='REJECTED', updatedAt=NOW() WHERE id=?",
             [cropId]
           )
-          const [crops] = await conn.execute('SELECT farmerId, cropName FROM CropListing WHERE id=?', [cropId])
           if (crops.length > 0) {
             await conn.execute(
               "INSERT INTO Notification (id, userId, type, title, message, relatedEntityType, relatedEntityId, `read`, createdAt, updatedAt) VALUES (UUID(),?,?,?,?,?,?,false,NOW(),NOW())",
               [crops[0].farmerId, 'INSPECTION_REJECTED', 'Lot inspection rejected', 'Your crop lot "' + crops[0].cropName + '" did not pass physical inspection. Remarks: ' + (remarks || 'See inspection details.'), 'crop', cropId]
             ).catch(() => {})
           }
+        } else if (status === 'REINSPECTION_REQUIRED') {
+          await conn.execute(
+            "UPDATE CropListing SET lotStatus='REINSPECTION_REQUIRED', inspectionStatus='REINSPECTION_REQUIRED', updatedAt=NOW() WHERE id=?",
+            [cropId]
+          )
+          if (crops.length > 0) {
+            await conn.execute(
+              "INSERT INTO Notification (id, userId, type, title, message, relatedEntityType, relatedEntityId, `read`, createdAt, updatedAt) VALUES (UUID(),?,?,?,?,?,?,false,NOW(),NOW())",
+              [crops[0].farmerId, 'INSPECTION_REQUEST', 'Reinspection required', 'Reinspection requested for "' + crops[0].cropName + '". Remarks: ' + (remarks || 'Please review and resubmit.'), 'crop', cropId]
+            ).catch(() => {})
+          }
         } else if (status === 'IN_PROGRESS') {
-          await conn.execute("UPDATE CropListing SET lotStatus='INSPECTION_IN_PROGRESS', updatedAt=NOW() WHERE id=?", [cropId])
+          await conn.execute(
+            "UPDATE CropListing SET lotStatus='INSPECTION_IN_PROGRESS', inspectionStatus='IN_PROGRESS', updatedAt=NOW() WHERE id=?",
+            [cropId]
+          )
         }
       }
 

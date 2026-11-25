@@ -32,7 +32,7 @@ module.exports = async function handler(req, res) {
 
       // Mark notification as read - only if it belongs to current user
       const [result] = await connection.execute(
-        "UPDATE Notification SET read = true, updatedAt = NOW() WHERE id = ? AND userId = ?",
+        "UPDATE Notification SET `read` = true, updatedAt = NOW() WHERE id = ? AND userId = ?",
         [notificationId, user.userId]
       )
 

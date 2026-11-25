@@ -65,8 +65,9 @@ async function getOrderDetailHandler(req, res) {
       // Check authorization
       const isBuyer = user.role === "buyer" && order.buyerId === user.userId
       const isFarmer = user.role === "farmer" && order.farmerId === user.userId
+      const isAdmin = user.role === "admin"
 
-      if (!isBuyer && !isFarmer) {
+      if (!isBuyer && !isFarmer && !isAdmin) {
         return res.status(403).json({ error: "Forbidden: unauthorized access to this order" })
       }
 
@@ -134,7 +135,7 @@ async function updateOrderStatusHandler(req, res) {
 
       // Get order and verify it belongs to this farmer
       const [orders] = await connection.execute(
-        "SELECT id, farmerId, status FROM \`Order\` WHERE id = ?",
+        "SELECT id, farmerId, buyerId, cropListingId, status FROM \`Order\` WHERE id = ?",
         [orderId]
       )
 
@@ -177,13 +178,19 @@ async function updateOrderStatusHandler(req, res) {
           "SELECT status FROM CropListing WHERE id = ?",
           [order.cropListingId]
         )
-        if (crop[0].status !== "SOLD") {
+        if (crop.length > 0 && crop[0].status !== "SOLD") {
           await connection.execute(
-            "UPDATE CropListing SET status = 'SOLD' WHERE id = ?",
+            "UPDATE CropListing SET status = 'SOLD', lotStatus = 'SOLD', updatedAt = NOW() WHERE id = ?",
             [order.cropListingId]
           )
         }
       }
+
+      // Notify buyer on order status change
+      await connection.execute(
+        "INSERT INTO Notification (id, userId, type, title, message, relatedEntityType, relatedEntityId, `read`, createdAt, updatedAt) VALUES (UUID(), ?, 'ORDER', ?, ?, 'order', ?, false, NOW(), NOW())",
+        [order.buyerId, `Order ${status.toLowerCase()}`, `Your order #${orderId.slice(0, 8).toUpperCase()} status is now ${status}.`, orderId]
+      ).catch(() => {})
 
       // Return updated order
       const [updatedOrders] = await connection.execute(

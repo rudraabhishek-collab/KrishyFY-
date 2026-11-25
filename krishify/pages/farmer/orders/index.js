@@ -36,6 +36,25 @@ function FarmerOrdersPage() {
     }).catch(() => { setMsg('❌ Network error'); setUpdating(u => ({ ...u, [orderId]: false })) })
   }
 
+  function startDelivery(orderId) {
+    setUpdating(u => ({ ...u, [orderId]: true })); setMsg('')
+    fetch('/api/delivery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ orderId })
+    }).then(r => r.json()).then(d => {
+      if (d.success) {
+        setMsg('✅ Delivery tracking initialized! Go to Delivery page to update status.')
+      } else if (d.error && d.error.includes('already exists')) {
+        window.location.href = '/farmer/delivery'
+      } else {
+        setMsg(`❌ ${d.error || 'Failed to start delivery'}`)
+      }
+      setUpdating(u => ({ ...u, [orderId]: false }))
+    }).catch(() => { setMsg('❌ Network error'); setUpdating(u => ({ ...u, [orderId]: false })) })
+  }
+
   if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
     React.createElement('div', { className: 'spinner', style: { margin: '0 auto 16px' } }),
     React.createElement('p', { style: { color: '#6b7280' } }, 'Loading orders...')
@@ -70,7 +89,13 @@ function FarmerOrdersPage() {
               React.createElement('span', null, `💰 ₹${Number(o.totalAmount).toLocaleString('en-IN')}`),
               React.createElement('span', null, `📅 ${new Date(o.createdAt).toLocaleDateString('en-IN')}`)
             ),
-            next.length > 0 && React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            React.createElement('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } },
+              React.createElement('a', { href: `/orders/${o.id}`, style: { padding: '5px 12px', borderRadius: '6px', border: '1px solid #d1d5db', textDecoration: 'none', fontSize: '12px', fontWeight: '600', color: '#374151' } }, 'View Details →'),
+              (o.status === 'CONFIRMED' || o.status === 'PROCESSING') && React.createElement('button', {
+                onClick: () => startDelivery(o.id),
+                disabled: updating[o.id],
+                style: { padding: '5px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: '#dbeafe', color: '#1e40af' }
+              }, '🚚 Start / Track Delivery'),
               next.map(s => React.createElement('button', {
                 key: s, onClick: () => updateStatus(o.id, s),
                 disabled: updating[o.id],

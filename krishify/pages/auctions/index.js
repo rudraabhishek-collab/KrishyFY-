@@ -16,7 +16,7 @@ function AuctionCard({ a, user, onBid }) {
   const qKg = a.quantityKg || 0
   const q = (qKg / 100).toFixed(0)
   const cur = a.currentBid ? Number(a.currentBid) : Number(a.startingPrice)
-  const min = cur + Number(a.minimumIncrement || 0)
+  const min = a.currentBid ? cur + Number(a.minimumIncrement || 0) : Number(a.startingPrice)
   const total = Math.round(qKg / 100 * cur)
   const ended = new Date(a.endsAt) <= new Date()
   const canBid = user && user.role === 'buyer' && !ended
@@ -65,10 +65,11 @@ function AuctionCard({ a, user, onBid }) {
           )
         )
       ),
-      React.createElement('div', { style: { fontSize: '13px', color: '#64748b', marginBottom: '14px', display: 'flex', gap: '16px', flexWrap: 'wrap' } },
+      React.createElement('div', { style: { fontSize: '13px', color: '#64748b', marginBottom: '14px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' } },
         React.createElement('span', null, '📦 ' + qKg.toLocaleString('en-IN') + 'kg · ' + q + 'q'),
         React.createElement('span', null, '📍 ' + (a.location || '—')),
-        React.createElement('span', null, '👥 ' + (a.bidCount || 0) + ' bids')
+        React.createElement('span', null, '👥 ' + (a.bidCount || 0) + ' bids'),
+        React.createElement('a', { href: '/marketplace/' + a.cropListingId, style: { color: '#166534', fontWeight: '700', textDecoration: 'none', marginLeft: 'auto' } }, 'View Lot →')
       ),
       msg && React.createElement('div', { style: { padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px', fontWeight: '600', background: msg.startsWith('✅') ? '#f0fdf4' : '#fee2e2', color: msg.startsWith('✅') ? '#166534' : '#991b1b', border: '1px solid ' + (msg.startsWith('✅') ? '#86efac' : '#fca5a5') } }, msg),
       !ended && canBid && (

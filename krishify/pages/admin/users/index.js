@@ -1,6 +1,6 @@
 const React = require('react')
 
-const ROLE_COLOR = { admin: ['#dbeafe','#1e40af'], farmer: ['#dcfce7','#166534'], buyer: ['#fef9c3','#854d0e'] }
+const ROLE_COLOR = { admin: ['#dbeafe','#1e40af'], farmer: ['#dcfce7','#166534'], buyer: ['#fef9c3','#854d0e'], inspector: ['#ede9fe','#6d28d9'] }
 
 function AdminUsersPage() {
   const [users, setUsers] = React.useState([])
@@ -53,6 +53,7 @@ function AdminUsersPage() {
           React.createElement('option', { value: '' }, 'All Roles'),
           React.createElement('option', { value: 'farmer' }, 'Farmer'),
           React.createElement('option', { value: 'buyer' }, 'Buyer'),
+          React.createElement('option', { value: 'inspector' }, 'Inspector'),
           React.createElement('option', { value: 'admin' }, 'Admin')
         ),
         React.createElement('button', { type: 'submit', style: { padding: '9px 20px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' } }, 'Search')

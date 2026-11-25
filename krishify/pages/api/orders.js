@@ -17,7 +17,7 @@ async function getSession(sessionId) {
   const connection = await pool.getConnection()
   try {
     const [sessions] = await connection.execute(
-      "SELECT s.id, s.userId, u.role FROM Session s JOIN User u ON s.userId = u.id WHERE s.id = ? AND s.expires > NOW()",
+      "SELECT s.id, s.userId, u.role, u.name FROM Session s JOIN User u ON s.userId = u.id WHERE s.id = ? AND s.expires > NOW()",
       [sessionId]
     )
     return sessions.length > 0 ? sessions[0] : null
@@ -47,7 +47,7 @@ async function createOrderHandler(req, res) {
   const connection = await pool.getConnection()
   try {
     const [listings] = await connection.execute(
-      "SELECT id, farmerId, cropName, quantityKg, quantity, unit, expectedPrice, expectedPricePerQuintal, lotStatus, inspectionStatus, aiAssessmentStatus FROM CropListing WHERE id = ?",
+      "SELECT id, farmerId, cropName, quantityKg, quantity, unit, expectedPrice, expectedPricePerQuintal, lotStatus, inspectionStatus, aiAssessmentStatus, status FROM CropListing WHERE id = ?",
       [cropListingId]
     )
 
@@ -57,12 +57,17 @@ async function createOrderHandler(req, res) {
 
     const crop = listings[0]
 
+    if (crop.status === 'SOLD' || crop.lotStatus === 'SOLD') {
+      return res.status(409).json({ error: 'This crop lot has already been sold' })
+    }
+
     if (crop.inspectionStatus !== 'APPROVED') {
       return res.status(409).json({ error: 'Physical inspection must be approved before order. Current status: ' + crop.inspectionStatus })
     }
 
     // Whole-lot enforcement: order quantity must be the full lot
     const lotQuantityKg = crop.quantityKg || 0
+    const quintals = lotQuantityKg / 100
     const requestedQty = quantity !== undefined ? parseInt(quantity) : lotQuantityKg
 
     if (requestedQty <= 0) {
@@ -79,7 +84,6 @@ async function createOrderHandler(req, res) {
 
     if (crop.expectedPricePerQuintal !== null && crop.expectedPricePerQuintal !== undefined) {
       // Digital Mandi: price is ₹/quintal, calculate total server-side
-      const quintals = lotQuantityKg / 100
       pricePerUnit = Number(crop.expectedPricePerQuintal)
       totalAmount = Math.round(quintals * pricePerUnit)
     } else if (crop.expectedPrice !== null && crop.expectedPrice !== undefined) {
@@ -99,7 +103,7 @@ async function createOrderHandler(req, res) {
     // Mark as SOLD if fully purchased (requestedQty equals lot quantity)
     if (requestedQty >= lotQuantityKg) {
       await connection.execute(
-        "UPDATE CropListing SET status = 'SOLD' WHERE id = ?",
+        "UPDATE CropListing SET status = 'SOLD', lotStatus = 'SOLD', updatedAt = NOW() WHERE id = ?",
         [cropListingId]
       )
     }

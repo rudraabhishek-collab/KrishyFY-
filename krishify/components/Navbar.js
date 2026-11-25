@@ -75,7 +75,7 @@ function Navbar() {
       React.createElement(NavLink, { href: '/auctions' }, '🏷️ Auctions'),
     )
     if (user.role === 'buyer') return React.createElement('div', { style: NAV_STYLES.links },
-      React.createElement(NavLink, { href: '/' }, 'Home'),
+      React.createElement(NavLink, { href: '/buyer/dashboard' }, 'Dashboard'),
       React.createElement(NavLink, { href: '/marketplace' }, '🌾 Mandi'),
       React.createElement(NavLink, { href: '/auctions' }, '🏷️ Auctions'),
       React.createElement(NavLink, { href: '/orders' }, 'Orders'),
@@ -113,7 +113,7 @@ function Navbar() {
       add('/', 'Home'); add('/marketplace', '🌾 Mandi'); add('/auctions', '🏷️ Auctions')
       add('/login', 'Sign In'); add('/register', 'Get Started')
     } else if (user.role === 'buyer') {
-      add('/', 'Home'); add('/marketplace', '🌾 Mandi'); add('/auctions', '🏷️ Auctions')
+      add('/buyer/dashboard', 'Dashboard'); add('/marketplace', '🌾 Mandi'); add('/auctions', '🏷️ Auctions')
       add('/orders', 'My Orders'); add('/notifications', '🔔 Notifications')
       links.push(React.createElement('button', { key: 'lo', onClick: () => { setOpen(false); logout() }, style: NAV_STYLES.mobileLogout }, 'Sign Out'))
     } else if (user.role === 'farmer') {

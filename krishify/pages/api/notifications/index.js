@@ -36,7 +36,7 @@ module.exports = async function handler(req, res) {
 
       // Count unread notifications
       const [unreadResult] = await connection.execute(
-        "SELECT COUNT(*) as count FROM Notification WHERE userId = ? AND read = false",
+        "SELECT COUNT(*) as count FROM Notification WHERE userId = ? AND `read` = false",
         [user.userId]
       )
       const unreadCount = unreadResult[0].count

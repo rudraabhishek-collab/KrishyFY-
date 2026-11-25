@@ -11,6 +11,8 @@ function MandiLotDetailPage() {
   const [bidAmount, setBidAmount] = React.useState('')
   const [bidMsg, setBidMsg] = React.useState('')
   const [bidding, setBidding] = React.useState(false)
+  const [ordering, setOrdering] = React.useState(false)
+  const [orderMsg, setOrderMsg] = React.useState('')
   const [id, setId] = React.useState(null)
 
   React.useEffect(() => {
@@ -61,6 +63,42 @@ function MandiLotDetailPage() {
       } else setBidMsg('❌ ' + (d.error || 'Failed to place bid'))
       setBidding(false)
     }).catch(() => { setBidMsg('❌ Network error'); setBidding(false) })
+  }
+
+  function placeDirectOrder() {
+    if (!user) { window.location.href = '/login'; return }
+    setOrdering(true); setOrderMsg('')
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ cropListingId: id })
+    }).then(r => r.json()).then(d => {
+      if (d.success && d.order) {
+        setOrderMsg('✅ Order placed! Redirecting...')
+        setTimeout(() => { window.location.href = '/orders/' + d.order.id }, 900)
+      } else {
+        setOrderMsg('❌ ' + (d.error || 'Failed to place order'))
+        setOrdering(false)
+      }
+    }).catch(() => { setOrderMsg('❌ Network error'); setOrdering(false) })
+  }
+
+  function finalizeAuction() {
+    if (!auction) return
+    setOrdering(true); setOrderMsg('')
+    fetch('/api/auctions/' + auction.id + '/finalize', {
+      method: 'POST',
+      credentials: 'include'
+    }).then(r => r.json()).then(d => {
+      if (d.success && d.order) {
+        setOrderMsg('✅ Auction finalized! Redirecting to order...')
+        setTimeout(() => { window.location.href = '/orders/' + d.order.id }, 900)
+      } else {
+        setOrderMsg('❌ ' + (d.error || 'Failed to finalize auction'))
+        setOrdering(false)
+      }
+    }).catch(() => { setOrderMsg('❌ Network error'); setOrdering(false) })
   }
 
   if (loading) return React.createElement('div', { style: { textAlign: 'center', padding: '80px' } },
@@ -240,14 +278,34 @@ function MandiLotDetailPage() {
                 ),
                 !user && !auctionEnded && React.createElement('a', { href: '/login', className: 'btn-primary', style: { display: 'block', textAlign: 'center' } }, 'Login to Bid'),
                 user && user.role === 'farmer' && !auctionEnded && React.createElement('p', { style: { fontSize: '13px', color: '#9ca3af', textAlign: 'center' } }, 'Farmers cannot bid on lots.'),
-                auctionEnded && React.createElement('div', { style: { background: '#f3f4f6', borderRadius: '8px', padding: '12px', textAlign: 'center', fontSize: '14px', color: '#6b7280' } }, 'This auction has ended.')
+                auctionEnded && React.createElement('div', { style: { background: '#f3f4f6', borderRadius: '8px', padding: '12px', textAlign: 'center', fontSize: '14px', color: '#6b7280' } },
+                  'This auction has ended.',
+                  orderMsg && React.createElement('div', { className: orderMsg.startsWith('✅') ? 'alert-success' : 'alert-error', style: { marginTop: '10px', fontSize: '13px' } }, orderMsg),
+                  auction.orderId
+                    ? React.createElement('a', { href: '/orders/' + auction.orderId, className: 'btn-primary', style: { display: 'block', marginTop: '10px', textAlign: 'center' } }, 'View Order →')
+                    : (currentBid && user && (user.role === 'buyer' || user.id === listing.farmerId) && listing.lotStatus !== 'SOLD') &&
+                      React.createElement('button', { onClick: finalizeAuction, disabled: ordering, className: 'btn-primary', style: { width: '100%', marginTop: '10px', padding: '10px' } }, ordering ? 'Finalizing...' : '🏆 Finalize Auction & Create Order')
+                )
               )
             : listing.lotStatus === 'QUALITY_VERIFIED' || listing.lotStatus === 'AUCTION_READY'
-              ? React.createElement('div', { className: 'card', style: { border: '2px solid #dcfce7', textAlign: 'center', padding: '32px' } },
+              ? React.createElement('div', { className: 'card', style: { border: '2px solid #dcfce7', textAlign: 'center', padding: '28px' } },
                   React.createElement('div', { style: { fontSize: '36px', marginBottom: '12px' } }, '✅'),
                   React.createElement('h3', { style: { color: '#166534', margin: '0 0 8px 0' } }, 'Quality Verified'),
-                  React.createElement('p', { style: { color: '#6b7280', fontSize: '14px' } }, 'This lot has passed physical inspection. Auction coming soon.')
+                  React.createElement('p', { style: { color: '#6b7280', fontSize: '14px', marginBottom: '16px' } }, 'This lot has passed physical inspection and is available for direct whole-lot purchase.'),
+                  estTotal && React.createElement('div', { style: { background: '#f0fdf4', borderRadius: '10px', padding: '12px', marginBottom: '16px' } },
+                    React.createElement('div', { style: { fontSize: '12px', color: '#6b7280' } }, 'WHOLE LOT PRICE'),
+                    React.createElement('div', { style: { fontSize: '24px', fontWeight: '900', color: '#166534' } }, '₹' + estTotal.toLocaleString('en-IN'))
+                  ),
+                  orderMsg && React.createElement('div', { className: orderMsg.startsWith('✅') ? 'alert-success' : 'alert-error', style: { marginBottom: '12px', fontSize: '13px' } }, orderMsg),
+                  user && user.role === 'buyer' && listing.status !== 'SOLD' && React.createElement('button', { onClick: placeDirectOrder, disabled: ordering, className: 'btn-primary', style: { width: '100%', padding: '12px', justifyContent: 'center' } }, ordering ? 'Placing Order...' : '🛒 Place Whole-Lot Order'),
+                  !user && React.createElement('a', { href: '/login', className: 'btn-primary', style: { display: 'block', textAlign: 'center' } }, 'Login as Buyer to Order')
                 )
+              : listing.lotStatus === 'SOLD' || listing.status === 'SOLD'
+                ? React.createElement('div', { className: 'card', style: { textAlign: 'center', padding: '32px' } },
+                    React.createElement('div', { style: { fontSize: '36px', marginBottom: '12px' } }, '🤝'),
+                    React.createElement('h3', { style: { margin: '0 0 8px 0' } }, 'Lot Sold'),
+                    React.createElement('p', { style: { color: '#6b7280', fontSize: '14px' } }, 'This crop lot has already been purchased.')
+                  )
               : React.createElement('div', { className: 'card', style: { textAlign: 'center', padding: '32px' } },
                   React.createElement('div', { style: { fontSize: '36px', marginBottom: '12px' } }, '⏳'),
                   React.createElement('h3', { style: { margin: '0 0 8px 0' } }, 'Awaiting Verification'),

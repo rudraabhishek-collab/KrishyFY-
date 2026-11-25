@@ -53,7 +53,20 @@ function OrderDetailPage({ id }) {
       body: JSON.stringify({ orderId: order.id })
     }).then(r => r.json()).then(data => {
       if (!data.success) { setPayMsg(`❌ ${data.error || 'Failed to create payment'}`); setPayLoading(false); return }
-      const { razorpayOrderId, amount, currency, keyId } = data.payment
+      const { razorpayOrderId, amount, currency, keyId, testMode } = data.payment
+      if (testMode) {
+        fetch('/api/payments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ orderId: order.id, razorpayOrderId, testMode: true })
+        }).then(r => r.json()).then(v => {
+          if (v.success) { setPayMsg('✅ Payment successful (TEST MODE)!'); setPayment({ status: 'PAID', razorpayPaymentId: v.payment.razorpayPaymentId, amount: v.payment.amount }) }
+          else setPayMsg(`❌ ${v.error || 'Verification failed'}`)
+          setPayLoading(false)
+        }).catch(() => { setPayMsg('❌ Network error'); setPayLoading(false) })
+        return
+      }
       const script = document.createElement('script')
       script.src = 'https://checkout.razorpay.com/v1/checkout.js'
       script.onload = () => {
@@ -120,6 +133,9 @@ function OrderDetailPage({ id }) {
             infoBox('💰 Price/Unit', `₹${Number(order.pricePerUnit).toLocaleString('en-IN')}`),
             infoBox('💵 Total Amount', `₹${Number(order.totalAmount).toLocaleString('en-IN')}`),
             infoBox('📅 Placed On', new Date(order.createdAt).toLocaleDateString('en-IN')),
+          ),
+          isBuyer && order.status === 'COMPLETED' && React.createElement('div', { style: { marginTop: '18px' } },
+            React.createElement('a', { href: `/reviews/new?orderId=${order.id}`, className: 'btn-outline', style: { fontSize: '13px' } }, '⭐ Leave a Review')
           )
         ),
 
@@ -152,7 +168,8 @@ function OrderDetailPage({ id }) {
           delivery.trackingNumber && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `Tracking: ${delivery.trackingNumber}`),
           delivery.deliveryPartner && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `Carrier: ${delivery.deliveryPartner}`),
           delivery.estimatedDeliveryDate && React.createElement('p', { style: { fontSize: '13px', color: '#6b7280', margin: '4px 0' } }, `ETA: ${new Date(delivery.estimatedDeliveryDate).toLocaleDateString('en-IN')}`),
-          delivery.deliveredAt && React.createElement('p', { style: { fontSize: '13px', color: '#166534', fontWeight: '600', margin: '4px 0' } }, `Delivered: ${new Date(delivery.deliveredAt).toLocaleDateString('en-IN')}`)
+          delivery.deliveredAt && React.createElement('p', { style: { fontSize: '13px', color: '#166534', fontWeight: '600', margin: '4px 0' } }, `Delivered: ${new Date(delivery.deliveredAt).toLocaleDateString('en-IN')}`),
+          React.createElement('a', { href: `/orders/${order.id}/delivery`, style: { display: 'inline-block', marginTop: '10px', color: '#166534', fontWeight: '700', fontSize: '13px', textDecoration: 'none' } }, 'View Full Timeline →')
         )
       )
     )

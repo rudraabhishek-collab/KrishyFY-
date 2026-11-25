@@ -1,4 +1,6 @@
 const { getPool } = require('../../../lib/db')
+const Razorpay = require('razorpay')
+
 const pool = getPool()
 
 async function getUser(sessionId) {
@@ -33,24 +35,48 @@ module.exports = async function handler(req, res) {
       const order = orders[0]
       if (order.status === 'CANCELLED') return res.status(400).json({ error: 'Order is cancelled' })
 
-      // Check already paid
       const [paid] = await conn.execute("SELECT id FROM Payment WHERE orderId = ? AND status = 'PAID'", [orderId])
       if (paid.length > 0) return res.status(400).json({ error: 'Order already paid' })
-
-      // Check existing payment record
-      const [existing] = await conn.execute('SELECT id FROM Payment WHERE orderId = ?', [orderId])
-      if (existing.length > 0) return res.status(409).json({ error: 'Payment record already exists for this order' })
 
       const amountInPaise = Math.round(Number(order.totalAmount) * 100)
       if (!amountInPaise || amountInPaise <= 0) return res.status(400).json({ error: 'Invalid order amount' })
 
-      // Generate test Razorpay order ID
-      const razorpayOrderId = `order_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+      const keyId = process.env.RAZORPAY_KEY_ID || ''
+      const keySecret = process.env.RAZORPAY_KEY_SECRET || ''
+      let razorpayOrderId = null
+      let testMode = false
 
-      await conn.execute(
-        "INSERT INTO Payment (id, orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature, amount, currency, status, createdAt, updatedAt) VALUES (UUID(), ?, ?, '', '', ?, 'INR', 'CREATED', NOW(), NOW())",
-        [orderId, razorpayOrderId, amountInPaise]
-      )
+      if (keyId && keySecret && !keyId.includes('placeholder') && !keyId.includes('your_key')) {
+        try {
+          const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret })
+          const rzpOrder = await rzp.orders.create({
+            amount: amountInPaise,
+            currency: 'INR',
+            receipt: `rcpt_${orderId.slice(0, 28)}`,
+          })
+          razorpayOrderId = rzpOrder.id
+        } catch (rzpErr) {
+          console.warn('[payment] Razorpay API unavailable, falling back to simulated TEST mode:', rzpErr.message)
+        }
+      }
+
+      if (!razorpayOrderId) {
+        razorpayOrderId = `order_test_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+        testMode = true
+      }
+
+      const [existing] = await conn.execute('SELECT id FROM Payment WHERE orderId = ?', [orderId])
+      if (existing.length > 0) {
+        await conn.execute(
+          "UPDATE Payment SET razorpayOrderId = ?, razorpayPaymentId = '', razorpaySignature = '', amount = ?, status = 'CREATED', updatedAt = NOW() WHERE orderId = ?",
+          [razorpayOrderId, amountInPaise, orderId]
+        )
+      } else {
+        await conn.execute(
+          "INSERT INTO Payment (id, orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature, amount, currency, status, createdAt, updatedAt) VALUES (UUID(), ?, ?, '', '', ?, 'INR', 'CREATED', NOW(), NOW())",
+          [orderId, razorpayOrderId, amountInPaise]
+        )
+      }
 
       return res.status(201).json({
         success: true,
@@ -58,8 +84,9 @@ module.exports = async function handler(req, res) {
           razorpayOrderId,
           amount: amountInPaise,
           currency: 'INR',
-          keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+          keyId: keyId || 'rzp_test_placeholder',
           orderId,
+          testMode,
         }
       })
     } finally { conn.release() }

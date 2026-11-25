@@ -215,7 +215,7 @@ CREATE TABLE `Notification` (
   `type` varchar(50) NOT NULL,
   `title` varchar(191) NOT NULL,
   `message` text NOT NULL,
-  `read_flag` tinyint(1) NOT NULL DEFAULT '0',
+  `read` tinyint(1) NOT NULL DEFAULT '0',
   `relatedEntityType` varchar(100) DEFAULT NULL,
   `relatedEntityId` varchar(191) DEFAULT NULL,
   `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

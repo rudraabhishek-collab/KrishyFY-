@@ -1,27 +1,24 @@
 const { getPool } = require('../../../lib/db')
+const { adminAuth } = require('../../../lib/adminAuth')
+
 module.exports = async function handler(req, res) {
-  // Admin authorization
-  const sessionId = req.cookies?.krishify_session
-  if (!sessionId) {
-    return res.status(401).json({ error: "Unauthenticated" })
+  const auth = await adminAuth(req)
+  if (!auth.success) {
+    return res.status(auth.error === "Unauthenticated" ? 401 : 403).json({ error: auth.error })
   }
 
   const pool = getPool()
-
   const connection = await pool.getConnection()
 
   try {
-    // System notifications (from Notification table)
     const [notifications] = await connection.execute(
-      "SELECT id, type, title, message, createdAt, read FROM Notification ORDER BY createdAt DESC LIMIT 10"
+      "SELECT id, userId, type, title, message, relatedEntityType, relatedEntityId, `read`, createdAt FROM Notification ORDER BY createdAt DESC LIMIT 10"
     )
 
-    // Recent activity from various entities
     const [recentActivity] = await connection.execute(
-      "SELECT id, userId, action, relatedEntityType, relatedEntityId, createdAt FROM Notification WHERE read = false ORDER BY createdAt DESC LIMIT 20"
+      "SELECT id, userId, type, title, relatedEntityType, relatedEntityId, createdAt FROM Notification WHERE `read` = false ORDER BY createdAt DESC LIMIT 20"
     )
 
-    // Return activity and notifications
     return res.status(200).json({
       success: true,
       activity: recentActivity,
@@ -31,7 +28,8 @@ module.exports = async function handler(req, res) {
     console.error("Admin notifications error:", error)
     return res.status(500).json({ error: "Internal server error" })
   } finally {
-    await connection.end()
+    connection.release()
   }
 }
+
 if (typeof module.exports === "function") { module.exports.default = module.exports; }

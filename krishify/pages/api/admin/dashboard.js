@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
 
     // Step 2: Get user count breakdown
     const [userStats] = await connection.execute(
-      "SELECT COUNT(*) as total, SUM(CASE WHEN role = 'buyer' THEN 1 ELSE 0 END) as buyers, SUM(CASE WHEN role = 'farmer' THEN 1 ELSE 0 END) as farmers, SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admins FROM User"
+      "SELECT COUNT(*) as total, SUM(CASE WHEN role = 'buyer' THEN 1 ELSE 0 END) as buyers, SUM(CASE WHEN role = 'farmer' THEN 1 ELSE 0 END) as farmers, SUM(CASE WHEN role = 'inspector' THEN 1 ELSE 0 END) as inspectors, SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) as admins FROM User"
     )
 
     // Step 3: Get crop listing stats
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
 
     // Step 4: Get auction stats
     const [auctionStats] = await connection.execute(
-      "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed FROM Auction"
+      "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'ACTIVE' AND endsAt > NOW() THEN 1 ELSE 0 END) as active, SUM(CASE WHEN status <> 'ACTIVE' OR endsAt <= NOW() THEN 1 ELSE 0 END) as completed FROM Auction"
     )
 
     // Step 5: Get order status breakdown
@@ -66,8 +66,9 @@ module.exports = async function handler(req, res) {
       dashboard: {
         users: {
           total: userStats[0].total,
-          buyers: userStats[0].buyers,
-          farmers: userStats[0].farmers,
+          buyers: userStats[0].buyers || 0,
+          farmers: userStats[0].farmers || 0,
+          inspectors: userStats[0].inspectors || 0,
           admins: userStats[0].admins || 0,
         },
         crops: {
@@ -105,7 +106,7 @@ module.exports = async function handler(req, res) {
         },
         reviews: {
           total: reviewStats[0].total || 0,
-          average_rating: reviewStats[0].average_rating ? parseFloat(reviewStats[0].average_rating.toFixed(1)) : 0,
+          average_rating: reviewStats[0].average_rating !== null ? parseFloat(Number(reviewStats[0].average_rating).toFixed(1)) : 0,
         },
       },
     })
@@ -113,7 +114,7 @@ module.exports = async function handler(req, res) {
     console.error("Admin dashboard error:", error)
     return res.status(500).json({ error: "Internal server error" })
   } finally {
-    await connection.end()
+    connection.release()
   }
 }
 if (typeof module.exports === "function") { module.exports.default = module.exports; }

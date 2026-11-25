@@ -1,13 +1,14 @@
 const { getPool } = require('../../../lib/db')
+
+const validRoles = ["admin", "buyer", "farmer", "inspector"]
+
 module.exports = async function handler(req, res) {
-  // Step 1: Admin authorization: verify session and role
   const sessionId = req.cookies?.krishify_session
   if (!sessionId) {
     return res.status(401).json({ error: "Unauthenticated" })
   }
 
   const pool = getPool()
-
   const connection = await pool.getConnection()
 
   try {
@@ -20,18 +21,15 @@ module.exports = async function handler(req, res) {
       return res.status(401).json({ error: "Session expired" })
     }
 
-    const user = sessions[0]
-    if (user.role !== "admin") {
+    if (sessions[0].role !== "admin") {
       return res.status(403).json({ error: "Forbidden: Admin role required" })
     }
 
-    // Step 2: Parse query parameters
     const { search, role, page = 1, limit = 20 } = req.query
-    const pageNum = parseInt(page, 10)
-    const pageSize = parseInt(limit, 10)
+    const pageNum = Math.max(1, parseInt(page, 10) || 1)
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
     const offset = (pageNum - 1) * pageSize
 
-    // Step 3: Build WHERE clause for search
     let whereClause = ""
     let whereParams = []
 
@@ -41,15 +39,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (role && validRoles.includes(role)) {
-      if (whereClause) {
-        whereClause += " AND role = ?"
-      } else {
-        whereClause = "WHERE role = ?"
-      }
+      whereClause += whereClause ? " AND role = ?" : "WHERE role = ?"
       whereParams.push(role)
     }
 
-    // Step 4: Get total count for pagination
     const [countResult] = await connection.execute(
       `SELECT COUNT(*) as total FROM User ${whereClause}`,
       whereParams
@@ -57,10 +50,9 @@ module.exports = async function handler(req, res) {
     const total = countResult[0].total
     const totalPages = Math.ceil(total / pageSize)
 
-    // Step 5: Get users with pagination
     const [users] = await connection.execute(
-      `SELECT id, name, email, role, createdAt, updatedAt FROM User ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-      [...whereParams, pageSize, offset]
+      `SELECT id, name, email, role, createdAt FROM User ${whereClause} ORDER BY createdAt DESC LIMIT ${pageSize} OFFSET ${offset}`,
+      whereParams
     )
 
     return res.status(200).json({
@@ -77,9 +69,8 @@ module.exports = async function handler(req, res) {
     console.error("Admin users error:", error)
     return res.status(500).json({ error: "Internal server error" })
   } finally {
-    await connection.end()
+    connection.release()
   }
 }
 
-const validRoles = ["admin", "buyer", "farmer"]
 if (typeof module.exports === "function") { module.exports.default = module.exports; }
